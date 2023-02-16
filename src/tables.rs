@@ -4,12 +4,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+//! Module for the various [Code] tables available
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodeError {
     TooShort,
     TooLong,
 }
 
+/// Enum representing characters or commands accessible through the [Ext1] byte
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 // must be ordered the same as the byte values
 pub enum Ext1 {
@@ -27,6 +30,7 @@ pub enum Ext1 {
     Unknown(Vec<u8>),
 }
 
+/// Enum of all possible characters or commands available within [Service] block
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 // must be ordered the same as the byte values for binary search to be successful
 pub enum Code {
@@ -197,6 +201,7 @@ pub enum Code {
     Unknown(Vec<u8>),
 }
 
+/// A collection of 8 Windows (0-7) represented as a bitfield
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub struct WindowBits(u8);
 
@@ -278,6 +283,7 @@ impl std::fmt::Debug for WindowBits {
     }
 }
 
+/// Anchor points
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Anchor {
     TopLeft,
@@ -327,6 +333,7 @@ impl From<Anchor> for u8 {
     }
 }
 
+/// Arguments required for the [Code::DefineWindow] command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DefineWindowArgs {
     pub window_id: u8, // [0, 7]
@@ -415,6 +422,7 @@ impl DefineWindowArgs {
     }
 }
 
+/// Text tustification options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Justify {
     Left,
@@ -446,6 +454,7 @@ impl From<Justify> for u8 {
     }
 }
 
+/// Text/Scroll/etc direction options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Direction {
     LeftToRight,
@@ -477,6 +486,7 @@ impl From<Direction> for u8 {
     }
 }
 
+/// Display effect options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DisplayEffect {
     Snap,
@@ -508,6 +518,7 @@ impl From<DisplayEffect> for u8 {
     }
 }
 
+/// Opacity options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Opacity {
     Solid,
@@ -539,6 +550,7 @@ impl From<Opacity> for u8 {
     }
 }
 
+/// Color value options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ColorValue {
     None,
@@ -570,6 +582,7 @@ impl From<ColorValue> for u8 {
     }
 }
 
+/// A RGB color
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Color {
     pub r: ColorValue,
@@ -613,6 +626,7 @@ impl From<u8> for ColorOpacity {
     }
 }
 
+/// Border options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum BorderType {
     None,
@@ -653,6 +667,7 @@ impl From<u8> for BorderType {
     }
 }
 
+/// Arguments required for the [Code::SetWindowAttributes] command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetWindowAttributesArgs {
     pub justify: Justify,
@@ -737,6 +752,7 @@ impl SetWindowAttributesArgs {
     }
 }
 
+/// Pen size options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum PenSize {
     Small,
@@ -768,6 +784,7 @@ impl From<u8> for PenSize {
     }
 }
 
+/// Font style options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FontStyle {
     Default,
@@ -811,6 +828,7 @@ impl From<u8> for FontStyle {
     }
 }
 
+/// Text tag options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextTag {
     Dialog,
@@ -878,6 +896,7 @@ impl From<u8> for TextTag {
     }
 }
 
+/// Text offset options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TextOffset {
     Subscript,
@@ -909,6 +928,7 @@ impl From<u8> for TextOffset {
     }
 }
 
+/// Edge type options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum EdgeType {
     None,
@@ -952,6 +972,7 @@ impl From<EdgeType> for u8 {
     }
 }
 
+/// Arguments required for the [Code::SetPenAttributes] command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetPenAttributesArgs {
     pub pen_size: PenSize,
@@ -1012,12 +1033,13 @@ impl SetPenAttributesArgs {
 }
 
 #[derive(Debug, Clone)]
-pub struct CodeMap<'a> {
+struct CodeMap<'a> {
     pub cea708_bytes: &'a [u8],
     pub code: Code,
     pub utf8: Option<char>,
 }
 
+/// Arguments required for the [Code::SetPenColor] command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetPenColorArgs {
     pub foreground_color: Color,
@@ -1070,6 +1092,7 @@ impl From<SetPenColorArgs> for [u8; 3] {
     }
 }
 
+/// Arguments required for the [Code::SetPenLocation] command
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SetPenLocationArgs {
     pub row: u8,    // [0, 14]
@@ -1302,6 +1325,13 @@ impl Code {
         }
     }
 
+    /// The length in bytes of this [Code]
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::tables::Code;
+    /// assert_eq!(Code::LatinCapitalA.byte_len(), 1);
+    /// ```
     pub fn byte_len(&self) -> usize {
         if let Ok(idx) = CODE_MAP_TABLE.binary_search_by_key(&self, |code_map| &code_map.code) {
             return CODE_MAP_TABLE[idx].cea708_bytes.len();
@@ -1359,6 +1389,13 @@ impl Code {
         })
     }
 
+    /// Parse a byte sequence into a list of [Code]s
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::tables::Code;
+    /// assert_eq!(Code::from_data(&[0x41]), Ok(vec![Code::LatinCapitalA]));
+    /// ```
     pub fn from_data(data: &[u8]) -> Result<Vec<Code>, CodeError> {
         let mut data_iter = data;
         let mut ret = vec![];
@@ -1376,6 +1413,15 @@ impl Code {
         Ok(ret)
     }
 
+    /// Write a [Code] to a byte stream
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::tables::Code;
+    /// let mut written = vec![];
+    /// Code::LatinCapitalA.write(&mut written).unwrap();
+    /// assert_eq!(written, [0x41]);
+    /// ```
     pub fn write<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         if let Ok(idx) = CODE_MAP_TABLE.binary_search_by_key(&self, |code_map| &code_map.code) {
             return w.write_all(CODE_MAP_TABLE[idx].cea708_bytes);
@@ -1403,6 +1449,15 @@ impl Code {
         }
     }
 
+    /// The utf8 char for this [Code]
+    ///
+    /// [Code]s that represent a command will return None.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::tables::Code;
+    /// assert_eq!(Code::LatinCapitalA.char(), Some('A'));
+    /// ```
     pub fn char(&self) -> Option<char> {
         // table is not currently sorted by utf8 value so cannot binary search through it.  May
         // need another lookup table if this is a performance concern
@@ -1415,6 +1470,15 @@ impl Code {
         })
     }
 
+    /// Retrieve a [Code] for a utf8 char
+    ///
+    /// If the char is not representable as a [Code], None will be returned.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::tables::Code;
+    /// assert_eq!(Code::from_char('A'), Some(Code::LatinCapitalA));
+    /// ```
     pub fn from_char(c: char) -> Option<Code> {
         // table is not currently sorted by utf8 value so cannot binary search through it.  May
         // need another lookup table if this is a performance concern
@@ -1604,4 +1668,3 @@ mod test {
         }
     }
 }
-

@@ -4,11 +4,19 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+//! # cea708-types
+//!
+//! Provides the necessary infrastructure to read and write [DTVCPacket]'s containing [Service]s
+//! with various [tables::Code]s
+//!
+//! The reference for this implementation is the [ANSI/CTA-708-E R-2018](https://shop.cta.tech/products/digital-television-dtv-closed-captioning) specification.
+
 #[macro_use]
 extern crate tracing;
 
 pub mod tables;
 
+/// Various possible errors when parsing data
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParserError {
     TooShort,
@@ -22,10 +30,13 @@ impl std::fmt::Display for ParserError {
     }
 }
 
+/// An error enum returned when writing data fails
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriterError {
-    // value is how many bytes would overflow by
+    /// Writing would overflow by how many bytes
     WouldOverflow(usize),
+    /// It is not possible to write to this resource
+    ReadOnly,
 }
 
 impl From<tables::CodeError> for ParserError {
@@ -46,11 +57,19 @@ pub struct CCDataParser {
 }
 
 impl CCDataParser {
+    /// Create a new [CCDataParser]
     pub fn new() -> Self {
         Self::default()
     }
 
-    #[tracing::instrument(name = "CCDataParse::parse", skip(self, data))]
+    /// Push a complete `cc_data` packet into the parser for processing.
+    ///
+    /// Will fail with [ParserError::LengthMismatch] if the length of the data does not match the
+    /// number of cc triples specified in the `cc_data` header.
+    ///
+    /// Ignores any CEA-608 data provided at the start of the data.  Any CEA-608 data provided
+    /// after valid CEA-708 data will return [WriterError::IncorrectData].
+    #[tracing::instrument(name = "CCDataParser::parse", skip(self, data))]
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
         if data.len() < 5 {
             // enough for 2 byte header plus 1 byte triple
@@ -208,10 +227,12 @@ impl CCDataParser {
         Ok(())
     }
 
+    /// Clear any internal buffers
     pub fn flush(&mut self) {
         *self = Self::default();
     }
 
+    /// Pop a valid [DTVCCPacket] or None if no packet could be parsed
     pub fn pop_packet(&mut self) -> Option<DTVCCPacket> {
         let ret = self.packets.pop();
         trace!("popped {ret:?}");
@@ -219,6 +240,7 @@ impl CCDataParser {
     }
 }
 
+/// A packet in the `cc_data` bitstream
 #[derive(Debug)]
 pub struct DTVCCPacket {
     seq_no: u8,
@@ -226,22 +248,51 @@ pub struct DTVCCPacket {
 }
 
 impl DTVCCPacket {
+    /// Create a new [DTVCCPacket] with the specified sequence number.
+    ///
+    /// # Panics
+    ///
+    /// * If seq_no >= 4
     pub fn new(seq_no: u8) -> Self {
+        if seq_no > 3 {
+            panic!("DTVCCPacket sequence numbers must be between 0 and 3 inclusive, not {seq_no}");
+        }
         Self {
             seq_no,
             services: vec![],
         }
     }
 
+    /// The sequence number of the DTVCCPacket
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::*;
+    /// let packet = DTVCCPacket::new(2);
+    /// assert_eq!(2, packet.sequence_no());
+    /// ```
     pub fn sequence_no(&self) -> u8 {
         self.seq_no
     }
 
+    /// The amount of free space (in bytes) that can by placed inside this [DTVCCPacket]
     pub fn free_space(&self) -> usize {
         // 128 is the max size of a DTVCCPacket, minus 1 for the header
         128 - self.len()
     }
 
+    /// The number of bytes this [DTVCCPacket] will use when written to a byte stream.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut packet = DTVCCPacket::new(2);
+    /// assert_eq!(0, packet.len());
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// packet.push_service(service);
+    /// assert_eq!(3, packet.len());
+    /// ```
     pub fn len(&self) -> usize {
         let services_len = self.services.iter().map(|s| s.len()).sum::<usize>();
         if services_len > 0 {
@@ -251,6 +302,18 @@ impl DTVCCPacket {
         }
     }
 
+    /// Push a completed service block into this [DTVCCPacket]
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut packet = DTVCCPacket::new(2);
+    /// assert_eq!(0, packet.len());
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// packet.push_service(service);
+    /// assert_eq!(3, packet.len());
+    /// ```
     pub fn push_service(&mut self, service: Service) -> Result<(), WriterError> {
         // TODO: fail if we would overrun max size
         if service.len() > self.free_space() {
@@ -273,6 +336,21 @@ impl DTVCCPacket {
         (seq_no, len)
     }
 
+    /// Parse bytes into a [DTVCCPacket]
+    ///
+    /// Will return [ParserError::TooShort] if the data is shorter than the length advertised in
+    /// the [DTVCCPacket] header.
+    ///
+    /// Will return errors from [Service::parse] if parsing the contained [Service]s fails.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let data = [0x02, 0x21, 0x41, 0x00];
+    /// let packet = DTVCCPacket::parse(&data).unwrap();
+    /// assert_eq!(3, packet.len());
+    /// assert_eq!(0, packet.sequence_no());
+    /// ```
     #[tracing::instrument(name = "DTVCCPacket::parse", err)]
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
         if data.is_empty() {
@@ -302,6 +380,7 @@ impl DTVCCPacket {
         Ok(Self { seq_no, services })
     }
 
+    /// Returns a copy of the [Service]s for this [DTVCCPacket]
     pub fn services(&self) -> Vec<Service> {
         self.services.clone()
     }
@@ -319,6 +398,20 @@ impl DTVCCPacket {
         (self.seq_no & 0x3) << 6 | packet_size_code as u8
     }
 
+    /// Write the [DTVCCPacket] to a byte stream
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut packet = DTVCCPacket::new(2);
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// packet.push_service(service);
+    /// let mut written = vec![];
+    /// packet.write(&mut written);
+    /// let expected = [0x82, 0x21, 0x41, 0x00];
+    /// assert_eq!(written, expected);
+    /// ```
     pub fn write<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
         w.write_all(&[self.hdr_byte()])?;
@@ -331,6 +424,20 @@ impl DTVCCPacket {
         Ok(())
     }
 
+    /// Write the [DTVCCPacket] bytestram encapsulated in the relevant cc_data bytes
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut packet = DTVCCPacket::new(2);
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// packet.push_service(service);
+    /// let mut written = vec![];
+    /// packet.write_cc_data(&mut written);
+    /// let expected = [0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x82, 0x21, 0xFE, 0x41, 0x00];
+    /// assert_eq!(written, expected);
+    /// ```
     #[tracing::instrument(name = "DTVCCPacket::write_cc_data", skip(self, w))]
     pub fn write_cc_data<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
@@ -368,6 +475,11 @@ impl DTVCCPacket {
     }
 }
 
+/// A [Service] in a [DTVCCPacket]
+///
+/// As specified in CEA-708, there can be a maximum of 63 services.  Service 1 is the primary
+/// caption service and Service 2 is the secondary caption service.  All other services are
+/// undefined.
 #[derive(Debug, Clone)]
 pub struct Service {
     number: u8,
@@ -375,13 +487,29 @@ pub struct Service {
 }
 
 impl Service {
+    /// Create a new [Service]
+    ///
+    /// # Panics
+    ///
+    /// * if number >= 64
     pub fn new(service_no: u8) -> Self {
+        if service_no >= 64 {
+            panic!("Service numbers must be between 0 and 63 inclusive, not {service_no}");
+        }
         Self {
             number: service_no,
             codes: vec![],
         }
     }
 
+    /// Returns the number of this [Service]
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut service = Service::new(1);
+    /// assert_eq!(service.number(), 1);
+    /// ```
     pub fn number(&self) -> u8 {
         self.number
     }
@@ -390,11 +518,31 @@ impl Service {
         self.codes.iter().map(|c| c.byte_len()).sum()
     }
 
+    /// The amount of free space (in bytes) that can by placed inside this [Service] block
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let service = Service::new(1);
+    /// assert_eq!(service.free_space(), 31);
+    /// ```
     pub fn free_space(&self) -> usize {
         // 31 is the maximum size of a service block
         31 - self.codes_len()
     }
 
+    /// The length in bytes of this [Service] block
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut service = Service::new(1);
+    /// assert_eq!(service.len(), 0);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// assert_eq!(service.len(), 2);
+    /// service.push_code(&Code::LatinCapitalB).unwrap();
+    /// assert_eq!(service.len(), 3);
+    /// ```
     pub fn len(&self) -> usize {
         if self.number == 0 {
             return 0;
@@ -406,6 +554,19 @@ impl Service {
         hdr_size + self.codes_len()
     }
 
+    /// Push a [Code] to the end of this [Service]
+    ///
+    /// # Errors
+    ///
+    /// * [WriterError::ReadOnly] if [Service] is number 0 (called the NULL Service)
+    /// * [WriterError::WouldOverflow] if adding the [Code] would cause to [Service] to overflow
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// ```
     #[tracing::instrument(
         skip(self),
         fields(
@@ -414,6 +575,10 @@ impl Service {
     )]
     pub fn push_code(&mut self, code: &tables::Code) -> Result<(), WriterError> {
         // TODO: errors?
+        if self.number == 0 {
+            return Err(WriterError::ReadOnly);
+        }
+
         if code.byte_len() > self.free_space() {
             let overflow_bytes = code.byte_len() - self.free_space();
             debug!("pushing would overflow by {overflow_bytes} bytes");
@@ -424,6 +589,21 @@ impl Service {
         Ok(())
     }
 
+    /// Parse a [Service] from a set of bytes
+    ///
+    /// # Errors
+    ///
+    /// * [ParserError::TooShort] if the length of the data is less than the size advertised in the
+    /// header
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let bytes = [0x21, 0x41];
+    /// let service = Service::parse(&bytes).unwrap();
+    /// assert_eq!(service.number(), 1);
+    /// assert_eq!(service.codes()[0], Code::LatinCapitalA);
+    /// ```
     #[tracing::instrument(name = "Service::parse", err)]
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
         let mut iter_data = data;
@@ -457,10 +637,32 @@ impl Service {
         }
     }
 
+    /// The ordered list of [Code]s present in this [Service] block
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// let codes = service.codes();
+    /// assert_eq!(codes, [Code::LatinCapitalA]);
+    /// ```
     pub fn codes(&self) -> Vec<tables::Code> {
         self.codes.clone()
     }
 
+    /// Write the [Service] block to a byte stream
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// let mut written = vec![];
+    /// service.write(&mut written);
+    /// let expected = [0x21, 0x41];
+    /// assert_eq!(written, expected);
+    /// ```
     pub fn write<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
         let len = (self.codes_len() & 0x3F) as u8;
@@ -530,7 +732,13 @@ mod test {
         // simple packet with a single service and two codes
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x22, 0xFE, 0x41, 0x42]],
-            packets: &[(0, &[(1, &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB])])],
+            packets: &[(
+                0,
+                &[(
+                    1,
+                    &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
+                )],
+            )],
         },
         // two packets each with a single service and single code
         TestCCData {
@@ -632,7 +840,61 @@ mod test {
         },
         // packet with a full service service
         TestCCData {
-            cc_data: &[&[0x80 | 0x40 | 0x11, 0xFF, 0xFF, 0xC0 | 0x11, 0x20 | 0x1F, 0xFE, 0x41, 0x42, 0xFE, 0x43, 0x44, 0xFE, 0x45, 0x46, 0xFE, 0x47, 0x48, 0xFE, 0x49, 0x4A, 0xFE, 0x4B, 0x4C, 0xFE, 0x4D, 0x4E, 0xFE, 0x4F, 0x50, 0xFE, 0x51, 0x52, 0xFE, 0x53, 0x54, 0xFE, 0x55, 0x56, 0xFE, 0x57, 0x58, 0xFE, 0x59, 0x5A, 0xFE, 0x61, 0x62, 0xFE, 0x63, 0x64, 0xFE, 0x65, 0x0]],
+            cc_data: &[&[
+                0x80 | 0x40 | 0x11,
+                0xFF,
+                0xFF,
+                0xC0 | 0x11,
+                0x20 | 0x1F,
+                0xFE,
+                0x41,
+                0x42,
+                0xFE,
+                0x43,
+                0x44,
+                0xFE,
+                0x45,
+                0x46,
+                0xFE,
+                0x47,
+                0x48,
+                0xFE,
+                0x49,
+                0x4A,
+                0xFE,
+                0x4B,
+                0x4C,
+                0xFE,
+                0x4D,
+                0x4E,
+                0xFE,
+                0x4F,
+                0x50,
+                0xFE,
+                0x51,
+                0x52,
+                0xFE,
+                0x53,
+                0x54,
+                0xFE,
+                0x55,
+                0x56,
+                0xFE,
+                0x57,
+                0x58,
+                0xFE,
+                0x59,
+                0x5A,
+                0xFE,
+                0x61,
+                0x62,
+                0xFE,
+                0x63,
+                0x64,
+                0xFE,
+                0x65,
+                0x0,
+            ]],
             packets: &[(
                 3,
                 &[(
