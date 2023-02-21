@@ -1,7 +1,7 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 
-use cea708_types::dtvcc::tables::Code;
+use cea708_types::tables::Code;
 
 use once_cell::sync::Lazy;
 

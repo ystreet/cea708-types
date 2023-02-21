@@ -16,16 +16,32 @@ pub enum CodeError {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 // must be ordered the same as the byte values
 pub enum Ext1 {
-    TSP,
-    NBTSP,
+    TransparentSpace,
+    NonBreakingTransparentSpace,
     HorizontalElipses,
     LatinCapitalSWithCaron,
     LatinCapitalLigatureOE,
+    FullBlock,
     SingleOpenQuote,
     SingleCloseQuote,
     DoubleOpenQuote,
     DoubleCloseQuote,
     SolidDot,
+    TradeMarkSign,
+    LatinLowerSWithCaron,
+    LatinLowerLigatureOE,
+    LatinCapitalYWithDiaeresis,
+    Fraction18,
+    Fraction38,
+    Fraction58,
+    Fraction78,
+    VerticalBorder,
+    UpperRightBorder,
+    LowerLeftBorder,
+    HorizontalBorder,
+    LowerRightBorder,
+    UpperLeftBorder,
+    ClosedCaptionSign,
 
     Unknown(Vec<u8>),
 }
@@ -197,6 +213,70 @@ pub enum Code {
     Fraction12,
     Fraction34,
     InvertedQuestionMark,
+    LatinCapitalAWithGrave,
+    LatinCapitalAWithAcute,
+    LatinCapitalAWithCircumflex,
+    LatinCapitalAWithTilde,
+    LatinCapitalAWithDiaeresis,
+    LatinCapitalAWithRingAbove,
+    LatinCapitalAe,
+    LatinCapitalCWithCedilla,
+    LatinCapitalEWithGrave,
+    LatinCapitalEWithAcute,
+    LatinCapitalEWithCircumflex,
+    LatinCapitalEWithDiaeseris,
+    LatinCapitalIWithGrave,
+    LatinCapitalIWithAcute,
+    LatinCapitalIWithCircumflex,
+    LatinCapitalIWithDiaeseris,
+    LatinCapitalEth,
+    LatinCapitalNWithTilde,
+    LatinCapitalOWithGrave,
+    LatinCapitalOWithAcute,
+    LatinCapitalOWithCircumflex,
+    LatinCapitalOWithTilde,
+    LatinCapitalOWithDiaeresis,
+    MultiplicationSign,
+    LatinCapitalOWithStroke,
+    LatinCapitalUWithGrave,
+    LatinCapitalUWithAcute,
+    LatinCapitalUWithCircumflex,
+    LatinCapitalUWithDiaeresis,
+    LatinCapitalYWithAcute,
+    LatinCapitalThorn,
+    LatinLowerSharpS,
+    LatinLowerAWithGrave,
+    LatinLowerAWithAcute,
+    LatinLowerAWithCircumflex,
+    LatinLowerAWithTilde,
+    LatinLowerAWithDiaeresis,
+    LatinLowerAWithRingAbove,
+    LatinLowerAe,
+    LatinLowerCWithCedilla,
+    LatinLowerEWithGrave,
+    LatinLowerEWithAcute,
+    LatinLowerEWithCircumflex,
+    LatinLowerEWithDiaeseris,
+    LatinLowerIWithGrave,
+    LatinLowerIWithAcute,
+    LatinLowerIWithCircumflex,
+    LatinLowerIWithDiaeseris,
+    LatinLowerEth,
+    LatinLowerNWithTilde,
+    LatinLowerOWithGrave,
+    LatinLowerOWithAcute,
+    LatinLowerOWithCircumflex,
+    LatinLowerOWithTilde,
+    LatinLowerOWithDiaeresis,
+    DivisionSign,
+    LatinLowerOWithStroke,
+    LatinLowerUWithGrave,
+    LatinLowerUWithAcute,
+    LatinLowerUWithCircumflex,
+    LatinLowerUWithDiaeresis,
+    LatinLowerYWithAcute,
+    LatinLowerThorn,
+    LatinLowerYWithDiaeresis,
     // TODO: more G1 code space
     Unknown(Vec<u8>),
 }
@@ -1137,13 +1217,63 @@ macro_rules! code_map_single_byte {
 }
 
 // needs to be sorted by bytes and Code
-static CODE_MAP_TABLE: [CodeMap; 144] = [
+static CODE_MAP_TABLE: [CodeMap; 234] = [
     code_map_single_byte!(0x00, Code::NUL, None),
     code_map_single_byte!(0x03, Code::ETX, None),
     code_map_single_byte!(0x08, Code::BS, None),
     code_map_single_byte!(0x0C, Code::FF, None),
     code_map_single_byte!(0x0D, Code::CR, None),
     code_map_single_byte!(0x0E, Code::HCR, None),
+    code_map_bytes!([0x10, 0x20], Code::Ext1(Ext1::TransparentSpace), None),
+    code_map_bytes!(
+        [0x10, 0x21],
+        Code::Ext1(Ext1::NonBreakingTransparentSpace),
+        None
+    ),
+    code_map_bytes!([0x10, 0x25], Code::Ext1(Ext1::HorizontalElipses), Some('…')),
+    code_map_bytes!(
+        [0x10, 0x2A],
+        Code::Ext1(Ext1::LatinCapitalSWithCaron),
+        Some('Š')
+    ),
+    code_map_bytes!(
+        [0x10, 0x2C],
+        Code::Ext1(Ext1::LatinCapitalLigatureOE),
+        Some('Œ')
+    ),
+    code_map_bytes!([0x10, 0x30], Code::Ext1(Ext1::FullBlock), Some('█')),
+    code_map_bytes!([0x10, 0x31], Code::Ext1(Ext1::SingleOpenQuote), Some('‘')),
+    code_map_bytes!([0x10, 0x32], Code::Ext1(Ext1::SingleCloseQuote), Some('’')),
+    code_map_bytes!([0x10, 0x33], Code::Ext1(Ext1::DoubleOpenQuote), Some('“')),
+    code_map_bytes!([0x10, 0x34], Code::Ext1(Ext1::DoubleCloseQuote), Some('”')),
+    code_map_bytes!([0x10, 0x35], Code::Ext1(Ext1::SolidDot), None),
+    code_map_bytes!([0x10, 0x39], Code::Ext1(Ext1::TradeMarkSign), Some('™')),
+    code_map_bytes!(
+        [0x10, 0x3A],
+        Code::Ext1(Ext1::LatinLowerSWithCaron),
+        Some('š')
+    ),
+    code_map_bytes!(
+        [0x10, 0x3C],
+        Code::Ext1(Ext1::LatinLowerLigatureOE),
+        Some('œ')
+    ),
+    code_map_bytes!(
+        [0x10, 0x3F],
+        Code::Ext1(Ext1::LatinCapitalYWithDiaeresis),
+        Some('Ÿ')
+    ),
+    code_map_bytes!([0x10, 0x76], Code::Ext1(Ext1::Fraction18), Some('⅛')),
+    code_map_bytes!([0x10, 0x77], Code::Ext1(Ext1::Fraction38), Some('⅜')),
+    code_map_bytes!([0x10, 0x78], Code::Ext1(Ext1::Fraction58), Some('⅝')),
+    code_map_bytes!([0x10, 0x79], Code::Ext1(Ext1::Fraction78), Some('⅞')),
+    code_map_bytes!([0x10, 0x7A], Code::Ext1(Ext1::VerticalBorder), None),
+    code_map_bytes!([0x10, 0x7B], Code::Ext1(Ext1::UpperRightBorder), None),
+    code_map_bytes!([0x10, 0x7C], Code::Ext1(Ext1::LowerLeftBorder), None),
+    code_map_bytes!([0x10, 0x7D], Code::Ext1(Ext1::HorizontalBorder), None),
+    code_map_bytes!([0x10, 0x7E], Code::Ext1(Ext1::LowerRightBorder), None),
+    code_map_bytes!([0x10, 0x7F], Code::Ext1(Ext1::UpperLeftBorder), None),
+    code_map_bytes!([0x10, 0xA0], Code::Ext1(Ext1::ClosedCaptionSign), None),
     code_map_single_byte!(0x20, Code::Space, Some(' ')),
     code_map_single_byte!(0x21, Code::ExclamationMark, Some('!')),
     code_map_single_byte!(0x22, Code::QuotationMark, Some('\"')),
@@ -1282,6 +1412,70 @@ static CODE_MAP_TABLE: [CodeMap; 144] = [
     code_map_single_byte!(0xBD, Code::Fraction12, Some('½')),
     code_map_single_byte!(0xBE, Code::Fraction34, Some('¾')),
     code_map_single_byte!(0xBF, Code::InvertedQuestionMark, Some('¿')),
+    code_map_single_byte!(0xC0, Code::LatinCapitalAWithGrave, Some('À')),
+    code_map_single_byte!(0xC1, Code::LatinCapitalAWithAcute, Some('Á')),
+    code_map_single_byte!(0xC2, Code::LatinCapitalAWithCircumflex, Some('Â')),
+    code_map_single_byte!(0xC3, Code::LatinCapitalAWithTilde, Some('Ã')),
+    code_map_single_byte!(0xC4, Code::LatinCapitalAWithDiaeresis, Some('Ä')),
+    code_map_single_byte!(0xC5, Code::LatinCapitalAWithRingAbove, Some('Å')),
+    code_map_single_byte!(0xC6, Code::LatinCapitalAe, Some('Æ')),
+    code_map_single_byte!(0xC7, Code::LatinCapitalCWithCedilla, Some('Ç')),
+    code_map_single_byte!(0xC8, Code::LatinCapitalEWithGrave, Some('È')),
+    code_map_single_byte!(0xC9, Code::LatinCapitalEWithAcute, Some('É')),
+    code_map_single_byte!(0xCA, Code::LatinCapitalEWithCircumflex, Some('Ê')),
+    code_map_single_byte!(0xCB, Code::LatinCapitalEWithDiaeseris, Some('Ë')),
+    code_map_single_byte!(0xCC, Code::LatinCapitalIWithGrave, Some('Ì')),
+    code_map_single_byte!(0xCD, Code::LatinCapitalIWithAcute, Some('Í')),
+    code_map_single_byte!(0xCE, Code::LatinCapitalIWithCircumflex, Some('Î')),
+    code_map_single_byte!(0xCF, Code::LatinCapitalIWithDiaeseris, Some('Ï')),
+    code_map_single_byte!(0xD0, Code::LatinCapitalEth, Some('Đ')),
+    code_map_single_byte!(0xD1, Code::LatinCapitalNWithTilde, Some('Ñ')),
+    code_map_single_byte!(0xD2, Code::LatinCapitalOWithGrave, Some('Ò')),
+    code_map_single_byte!(0xD3, Code::LatinCapitalOWithAcute, Some('Ó')),
+    code_map_single_byte!(0xD4, Code::LatinCapitalOWithCircumflex, Some('Ô')),
+    code_map_single_byte!(0xD5, Code::LatinCapitalOWithTilde, Some('Õ')),
+    code_map_single_byte!(0xD6, Code::LatinCapitalOWithDiaeresis, Some('Ö')),
+    code_map_single_byte!(0xD7, Code::MultiplicationSign, Some('×')),
+    code_map_single_byte!(0xD8, Code::LatinCapitalOWithStroke, Some('Ø')),
+    code_map_single_byte!(0xD9, Code::LatinCapitalUWithGrave, Some('Ù')),
+    code_map_single_byte!(0xDA, Code::LatinCapitalUWithAcute, Some('Ú')),
+    code_map_single_byte!(0xDB, Code::LatinCapitalUWithCircumflex, Some('Û')),
+    code_map_single_byte!(0xDC, Code::LatinCapitalUWithDiaeresis, Some('Ü')),
+    code_map_single_byte!(0xDD, Code::LatinCapitalYWithAcute, Some('Ý')),
+    code_map_single_byte!(0xDE, Code::LatinCapitalThorn, Some('Þ')),
+    code_map_single_byte!(0xDF, Code::LatinLowerSharpS, Some('ß')),
+    code_map_single_byte!(0xE0, Code::LatinLowerAWithGrave, Some('à')),
+    code_map_single_byte!(0xE1, Code::LatinLowerAWithAcute, Some('á')),
+    code_map_single_byte!(0xE2, Code::LatinLowerAWithCircumflex, Some('â')),
+    code_map_single_byte!(0xE3, Code::LatinLowerAWithTilde, Some('ã')),
+    code_map_single_byte!(0xE4, Code::LatinLowerAWithDiaeresis, Some('ä')),
+    code_map_single_byte!(0xE5, Code::LatinLowerAWithRingAbove, Some('å')),
+    code_map_single_byte!(0xE6, Code::LatinLowerAe, Some('æ')),
+    code_map_single_byte!(0xE7, Code::LatinLowerCWithCedilla, Some('ç')),
+    code_map_single_byte!(0xE8, Code::LatinLowerEWithGrave, Some('è')),
+    code_map_single_byte!(0xE9, Code::LatinLowerEWithAcute, Some('é')),
+    code_map_single_byte!(0xEA, Code::LatinLowerEWithCircumflex, Some('ê')),
+    code_map_single_byte!(0xEB, Code::LatinLowerEWithDiaeseris, Some('ë')),
+    code_map_single_byte!(0xEC, Code::LatinLowerIWithGrave, Some('ì')),
+    code_map_single_byte!(0xED, Code::LatinLowerIWithAcute, Some('í')),
+    code_map_single_byte!(0xEE, Code::LatinLowerIWithCircumflex, Some('î')),
+    code_map_single_byte!(0xEF, Code::LatinLowerIWithDiaeseris, Some('ï')),
+    code_map_single_byte!(0xF0, Code::LatinLowerEth, Some('ð')),
+    code_map_single_byte!(0xF1, Code::LatinLowerNWithTilde, Some('ñ')),
+    code_map_single_byte!(0xF2, Code::LatinLowerOWithGrave, Some('ò')),
+    code_map_single_byte!(0xF3, Code::LatinLowerOWithAcute, Some('ó')),
+    code_map_single_byte!(0xF4, Code::LatinLowerOWithCircumflex, Some('ô')),
+    code_map_single_byte!(0xF5, Code::LatinLowerOWithTilde, Some('õ')),
+    code_map_single_byte!(0xF6, Code::LatinLowerOWithDiaeresis, Some('ö')),
+    code_map_single_byte!(0xF7, Code::DivisionSign, Some('÷')),
+    code_map_single_byte!(0xF8, Code::LatinLowerOWithStroke, Some('ø')),
+    code_map_single_byte!(0xF9, Code::LatinLowerUWithGrave, Some('ù')),
+    code_map_single_byte!(0xFA, Code::LatinLowerUWithAcute, Some('ú')),
+    code_map_single_byte!(0xFB, Code::LatinLowerUWithCircumflex, Some('û')),
+    code_map_single_byte!(0xFC, Code::LatinLowerUWithDiaeresis, Some('ü')),
+    code_map_single_byte!(0xFD, Code::LatinLowerYWithAcute, Some('ý')),
+    code_map_single_byte!(0xFE, Code::LatinLowerThorn, Some('þ')),
+    code_map_single_byte!(0xFF, Code::LatinLowerYWithDiaeresis, Some('ÿ')),
 ];
 
 macro_rules! parse_control_code {
@@ -1516,6 +1710,7 @@ impl Ext1 {
     }
 
     fn byte_len(&self) -> usize {
+        // All currently known Ext1 codes are covered in the static table
         match self {
             Ext1::Unknown(data) => data.len(),
             _ => unreachable!(),
@@ -1523,6 +1718,7 @@ impl Ext1 {
     }
 
     fn write<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
+        // All currently known Ext1 codes are covered in the static table
         match self {
             Ext1::Unknown(data) => w.write_all(data),
             _ => unreachable!(),
@@ -1530,9 +1726,8 @@ impl Ext1 {
     }
 
     fn parse(data: &[u8]) -> Result<Ext1, CodeError> {
-        Ok(match data[0] {
-            _ => Ext1::Unknown(data.to_vec()),
-        })
+        // All currently known Ext1 codes are covered in the static table
+        Ok(Ext1::Unknown(data.to_vec()))
     }
 }
 
@@ -1540,6 +1735,19 @@ impl Ext1 {
 mod test {
     use super::*;
     use crate::tests::*;
+
+    #[test]
+    fn codes_table_ordered() {
+        test_init_log();
+        let mut iter = CODE_MAP_TABLE.iter().peekable();
+        while let Some(code_map) = iter.next() {
+            if let Some(peek) = iter.peek() {
+                trace!("checking ordinality for {code_map:?} and {peek:?}");
+                assert!(peek.code > code_map.code);
+                assert!(peek.cea708_bytes > code_map.cea708_bytes);
+            }
+        }
+    }
 
     static VARIABLE_TEST_CODES: [CodeMap; 10] = [
         code_map_bytes!(
