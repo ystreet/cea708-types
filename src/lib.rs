@@ -6,7 +6,7 @@
 
 //! # cea708-types
 //!
-//! Provides the necessary infrastructure to read and write [DTVCPacket]'s containing [Service]s
+//! Provides the necessary infrastructure to read and write [DTVCCPacket]'s containing [Service]s
 //! with various [tables::Code]s
 //!
 //! The reference for this implementation is the [ANSI/CTA-708-E R-2018](https://shop.cta.tech/products/digital-television-dtv-closed-captioning) specification.
@@ -68,7 +68,7 @@ impl CCDataParser {
     /// number of cc triples specified in the `cc_data` header.
     ///
     /// Ignores any CEA-608 data provided at the start of the data.  Any CEA-608 data provided
-    /// after valid CEA-708 data will return [WriterError::IncorrectData].
+    /// after valid CEA-708 data will return [ParserError::IncorrectData].
     #[tracing::instrument(name = "CCDataParser::parse", skip(self, data))]
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
         if data.len() < 5 {
@@ -554,12 +554,12 @@ impl Service {
         hdr_size + self.codes_len()
     }
 
-    /// Push a [Code] to the end of this [Service]
+    /// Push a [tables::Code] to the end of this [Service]
     ///
     /// # Errors
     ///
     /// * [WriterError::ReadOnly] if [Service] is number 0 (called the NULL Service)
-    /// * [WriterError::WouldOverflow] if adding the [Code] would cause to [Service] to overflow
+    /// * [WriterError::WouldOverflow] if adding the [tables::Code] would cause to [Service] to overflow
     ///
     /// # Examples
     /// ```
@@ -637,7 +637,7 @@ impl Service {
         }
     }
 
-    /// The ordered list of [Code]s present in this [Service] block
+    /// The ordered list of [tables::Code]s present in this [Service] block
     ///
     /// # Examples
     /// ```

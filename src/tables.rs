@@ -46,7 +46,7 @@ pub enum Ext1 {
     Unknown(Vec<u8>),
 }
 
-/// Enum of all possible characters or commands available within [Service] block
+/// Enum of all possible characters or commands available within [Service](super::Service) block
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 // must be ordered the same as the byte values for binary search to be successful
 pub enum Code {
