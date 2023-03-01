@@ -375,7 +375,13 @@ pub enum Anchor {
     BottomLeft,
     BottomMiddle,
     BottomRight,
-    Undefined(u8),
+    Undefined9,
+    Undefined10,
+    Undefined11,
+    Undefined12,
+    Undefined13,
+    Undefined14,
+    Undefined15,
 }
 
 impl From<u8> for Anchor {
@@ -390,7 +396,13 @@ impl From<u8> for Anchor {
             6 => Anchor::BottomLeft,
             7 => Anchor::BottomMiddle,
             8 => Anchor::BottomRight,
-            9..=15 => Anchor::Undefined(a),
+            9 => Anchor::Undefined9,
+            10 => Anchor::Undefined10,
+            11 => Anchor::Undefined11,
+            12 => Anchor::Undefined12,
+            13 => Anchor::Undefined13,
+            14 => Anchor::Undefined14,
+            15 => Anchor::Undefined15,
             _ => unreachable!(),
         }
     }
@@ -408,7 +420,13 @@ impl From<Anchor> for u8 {
             Anchor::BottomLeft => 6,
             Anchor::BottomMiddle => 7,
             Anchor::BottomRight => 8,
-            Anchor::Undefined(a) => a,
+            Anchor::Undefined9 => 9,
+            Anchor::Undefined10 => 10,
+            Anchor::Undefined11 => 11,
+            Anchor::Undefined12 => 12,
+            Anchor::Undefined13 => 13,
+            Anchor::Undefined14 => 14,
+            Anchor::Undefined15 => 15,
         }
     }
 }
@@ -715,7 +733,8 @@ pub enum BorderType {
     Uniform,
     ShadowLeft,
     ShadowRight,
-    Undefined(u8),
+    Undefined6,
+    Undefined7,
 }
 
 impl From<BorderType> for u8 {
@@ -727,7 +746,8 @@ impl From<BorderType> for u8 {
             BorderType::Uniform => 3,
             BorderType::ShadowLeft => 4,
             BorderType::ShadowRight => 5,
-            BorderType::Undefined(bt) => bt,
+            BorderType::Undefined6 => 6,
+            BorderType::Undefined7 => 7,
         }
     }
 }
@@ -741,7 +761,8 @@ impl From<u8> for BorderType {
             3 => BorderType::Uniform,
             4 => BorderType::ShadowLeft,
             5 => BorderType::ShadowRight,
-            6..=7 => BorderType::Undefined(bt),
+            6 => BorderType::Undefined6,
+            7 => BorderType::Undefined7,
             _ => unreachable!(),
         }
     }
