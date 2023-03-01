@@ -381,8 +381,8 @@ impl DTVCCPacket {
     }
 
     /// Returns a copy of the [Service]s for this [DTVCCPacket]
-    pub fn services(&self) -> Vec<Service> {
-        self.services.clone()
+    pub fn services(&self) -> &[Service] {
+        &self.services
     }
 
     fn cc_count(&self) -> usize {
@@ -647,8 +647,8 @@ impl Service {
     /// let codes = service.codes();
     /// assert_eq!(codes, [Code::LatinCapitalA]);
     /// ```
-    pub fn codes(&self) -> Vec<tables::Code> {
-        self.codes.clone()
+    pub fn codes(&self) -> &[tables::Code] {
+        &self.codes
     }
 
     /// Write the [Service] block to a byte stream
