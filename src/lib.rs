@@ -723,7 +723,7 @@ mod test {
         packets: &'a [(u8, &'a [(u8, &'a [tables::Code])])],
     }
 
-    static TEST_CC_DATA: [TestCCData; 5] = [
+    static TEST_CC_DATA: [TestCCData; 6] = [
         // simple packet with a single service and single code
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
@@ -758,6 +758,11 @@ mod test {
                 &[0x80 | 0x40 | 0x01, 0xFF, 0xFE, 0x41, 0x00],
             ],
             packets: &[(0, &[(1, &[tables::Code::LatinCapitalA])])],
+        },
+        // simple packet with a single null service
+        TestCCData {
+            cc_data: &[&[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x01, 0x00]],
+            packets: &[(0, &[])],
         },
         // two packets with a single service and one code split across both packets with 608
         // padding data
