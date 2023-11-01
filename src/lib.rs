@@ -718,27 +718,45 @@ mod test {
     }
 
     #[derive(Debug)]
+    struct ServiceData<'a> {
+        service_no: u8,
+        codes: &'a [tables::Code],
+    }
+
+    #[derive(Debug)]
+    struct PacketData<'a> {
+        sequence_no: u8,
+        services: &'a [ServiceData<'a>],
+    }
+
+    #[derive(Debug)]
     struct TestCCData<'a> {
         cc_data: &'a [&'a [u8]],
-        packets: &'a [(u8, &'a [(u8, &'a [tables::Code])])],
+        packets: &'a [PacketData<'a>],
     }
 
     static TEST_CC_DATA: [TestCCData; 6] = [
         // simple packet with a single service and single code
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
-            packets: &[(0, &[(1, &[tables::Code::LatinCapitalA])])],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA],
+                }],
+            }],
         },
         // simple packet with a single service and two codes
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x22, 0xFE, 0x41, 0x42]],
-            packets: &[(
-                0,
-                &[(
-                    1,
-                    &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
-                )],
-            )],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
+                }],
+            }],
         },
         // two packets each with a single service and single code
         TestCCData {
@@ -747,8 +765,20 @@ mod test {
                 &[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x42, 0x21, 0xFE, 0x42, 0x00],
             ],
             packets: &[
-                (0, &[(1, &[tables::Code::LatinCapitalA])]),
-                (1, &[(1, &[tables::Code::LatinCapitalB])]),
+                PacketData {
+                    sequence_no: 0,
+                    services: &[ServiceData {
+                        service_no: 1,
+                        codes: &[tables::Code::LatinCapitalA],
+                    }],
+                },
+                PacketData {
+                    sequence_no: 1,
+                    services: &[ServiceData {
+                        service_no: 1,
+                        codes: &[tables::Code::LatinCapitalB],
+                    }],
+                },
             ],
         },
         // two packets with a single service and one code split across both packets
@@ -757,12 +787,21 @@ mod test {
                 &[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x02, 0x21],
                 &[0x80 | 0x40 | 0x01, 0xFF, 0xFE, 0x41, 0x00],
             ],
-            packets: &[(0, &[(1, &[tables::Code::LatinCapitalA])])],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA],
+                }],
+            }],
         },
         // simple packet with a single null service
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x01, 0x00]],
-            packets: &[(0, &[])],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[],
+            }],
         },
         // two packets with a single service and one code split across both packets with 608
         // padding data
@@ -795,7 +834,13 @@ mod test {
                     0x00,
                 ],
             ],
-            packets: &[(0, &[(1, &[tables::Code::LatinCapitalA])])],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA],
+                }],
+            }],
         },
     ];
 
@@ -810,13 +855,13 @@ mod test {
                 parser.push(data).unwrap();
                 while let Some(packet) = parser.pop_packet() {
                     let expected = expected_iter.next().unwrap();
-                    assert_eq!(expected.0, packet.sequence_no());
+                    assert_eq!(expected.sequence_no, packet.sequence_no());
                     let services = packet.services();
-                    let mut expected_service_iter = expected.1.iter();
+                    let mut expected_service_iter = expected.services.iter();
                     for parsed_service in services.iter() {
                         let expected_service = expected_service_iter.next().unwrap();
-                        assert_eq!(parsed_service.number(), expected_service.0);
-                        assert_eq!(expected_service.1, parsed_service.codes());
+                        assert_eq!(parsed_service.number(), expected_service.service_no);
+                        assert_eq!(expected_service.codes, parsed_service.codes());
                     }
                     assert!(expected_service_iter.next().is_none());
                 }
@@ -830,18 +875,24 @@ mod test {
         // simple packet with a single service and single code
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
-            packets: &[(0, &[(1, &[tables::Code::LatinCapitalA])])],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA],
+                }],
+            }],
         },
         // simple packet with a single service and two codes
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x22, 0xFE, 0x41, 0x42]],
-            packets: &[(
-                0,
-                &[(
-                    1,
-                    &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
-                )],
-            )],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
+                }],
+            }],
         },
         // packet with a full service service
         TestCCData {
@@ -900,11 +951,11 @@ mod test {
                 0x65,
                 0x0,
             ]],
-            packets: &[(
-                3,
-                &[(
-                    1,
-                    &[
+            packets: &[PacketData {
+                sequence_no: 3,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[
                         tables::Code::LatinCapitalA,
                         tables::Code::LatinCapitalB,
                         tables::Code::LatinCapitalC,
@@ -937,8 +988,8 @@ mod test {
                         tables::Code::LatinLowerD,
                         tables::Code::LatinLowerE,
                     ],
-                )],
-            )],
+                }],
+            }],
         },
     ];
 
@@ -947,11 +998,11 @@ mod test {
         test_init_log();
         for cc_data in WRITE_CC_DATA.iter() {
             info!("writing {cc_data:?}");
-            for ((packet_i, packet), cc_data) in cc_data.packets.iter().zip(cc_data.cc_data) {
-                let mut pack = DTVCCPacket::new(*packet_i);
-                for (service_no, codes) in packet.iter() {
-                    let mut service = Service::new(*service_no);
-                    for code in codes.iter() {
+            for (packet_data, cc_data) in cc_data.packets.iter().zip(cc_data.cc_data) {
+                let mut pack = DTVCCPacket::new(packet_data.sequence_no);
+                for service_data in packet_data.services.iter() {
+                    let mut service = Service::new(service_data.service_no);
+                    for code in service_data.codes.iter() {
                         service.push_code(code).unwrap();
                     }
                     pack.push_service(service).unwrap();
