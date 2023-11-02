@@ -290,6 +290,16 @@ impl Framerate {
         Self { numer, denom }
     }
 
+    /// The numerator of this [`Framerate`] fraction
+    pub fn numer(&self) -> u32 {
+        self.numer
+    }
+
+    /// The denominator of this [`Framerate`] fraction
+    pub fn denom(&self) -> u32 {
+        self.denom
+    }
+
     fn cea608_pairs_per_field(&self) -> usize {
         // CEA-608 has a max bitrate of 960 bits/s for a single field
         // TODO: handle alternating counts for 24fps
@@ -1425,6 +1435,13 @@ mod test {
     fn framerate_max_cc_count() {
         assert_eq!(Framerate::new(60, 1).max_cc_count(), 10);
         assert_eq!(Framerate::new(30, 1).max_cc_count(), 20);
+    }
+
+    #[test]
+    fn framerate_new() {
+        let fps = Framerate::new(30, 8);
+        assert_eq!(fps.numer(), 30);
+        assert_eq!(fps.denom(), 8);
     }
 }
 
