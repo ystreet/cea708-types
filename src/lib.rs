@@ -416,10 +416,13 @@ impl CCDataWriter {
         let mut cc_count_rem = if self.output_padding {
             framerate.max_cc_count()
         } else {
-            framerate
-                .max_cc_count()
-                .min(cea608_pair_rem + self.packets.iter().map(|p| p.cc_count()).sum::<usize>())
+            framerate.max_cc_count().min(
+                cea608_pair_rem
+                    + self.pending_packet_data.len() / 3
+                    + self.packets.iter().map(|p| p.cc_count()).sum::<usize>(),
+            )
         };
+        trace!("writing with cc_count: {cc_count_rem} and {cea608_pair_rem} cea608 pairs");
 
         let reserved = 0x80;
         let process_cc_flag = 0x40;
@@ -429,8 +432,8 @@ impl CCDataWriter {
         ])?;
         while cc_count_rem > 0 {
             if cea608_pair_rem > 0 {
-                trace!("attempting to write a cea608 packet");
                 if !self.last_cea608_was_field1 {
+                    trace!("attempting to write a cea608 byte pair from field 1");
                     if let Some((byte0, byte1)) = self.cea608_1.pop() {
                         w.write_all(&[0xFC, byte0, byte1])?;
                         cc_count_rem -= 1;
@@ -444,6 +447,7 @@ impl CCDataWriter {
                     }
                     self.last_cea608_was_field1 = true;
                 } else {
+                    trace!("attempting to write a cea608 byte pair from field 2");
                     if let Some((byte0, byte1)) = self.cea608_2.pop() {
                         w.write_all(&[0xFD, byte0, byte1])?;
                         cc_count_rem -= 1;
@@ -457,11 +461,6 @@ impl CCDataWriter {
             } else {
                 let mut current_packet_data = &mut self.pending_packet_data;
                 let mut packet_offset = 0;
-                trace!(
-                    "1 pending data {} packet offset {}",
-                    current_packet_data.len(),
-                    packet_offset
-                );
                 while packet_offset >= current_packet_data.len() {
                     if let Some(packet) = self.packets.pop() {
                         trace!("starting packet {packet:?}");
@@ -472,11 +471,8 @@ impl CCDataWriter {
                     }
                 }
 
-                trace!(
-                    "2 pending data {} packet offset {}",
-                    current_packet_data.len(),
-                    packet_offset
-                );
+                trace!("cea708 pending data length {}", current_packet_data.len(),);
+
                 while packet_offset < current_packet_data.len() && cc_count_rem > 0 {
                     assert!(current_packet_data.len() >= packet_offset + 3);
                     w.write_all(&current_packet_data[packet_offset..packet_offset + 3])?;
@@ -487,7 +483,9 @@ impl CCDataWriter {
                 self.pending_packet_data = current_packet_data[packet_offset..].to_vec();
 
                 if self.packets.is_empty() && self.pending_packet_data.is_empty() {
+                    // no more data to write
                     if self.output_padding {
+                        trace!("writing {cc_count_rem} padding bytes");
                         while cc_count_rem > 0 {
                             w.write_all(&[0xFA, 0x00, 0x00])?;
                             cc_count_rem -= 1;
@@ -1132,7 +1130,7 @@ mod test {
         }
     }
 
-    static WRITE_CC_DATA: [TestCCData; 5] = [
+    static WRITE_CC_DATA: [TestCCData; 6] = [
         // simple packet with a single service and single code
         TestCCData {
             framerate: Framerate::new(25, 1),
@@ -1272,6 +1270,117 @@ mod test {
             packets: &[],
             cea608: &[&[Cea608::Field2(0x41, 0x42)]],
         },
+        // simple packet that will span two outputs
+        TestCCData {
+            framerate: Framerate::new(60, 1),
+            cc_data: &[
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFC,
+                    0x20,
+                    0x42,
+                    0xFF,
+                    0xC0 | 0x11,
+                    0x20 | 0x1F,
+                    0xFE,
+                    0x41,
+                    0x42,
+                    0xFE,
+                    0x43,
+                    0x44,
+                    0xFE,
+                    0x45,
+                    0x46,
+                    0xFE,
+                    0x47,
+                    0x48,
+                    0xFE,
+                    0x49,
+                    0x4A,
+                    0xFE,
+                    0x4B,
+                    0x4C,
+                    0xFE,
+                    0x4D,
+                    0x4E,
+                    0xFE,
+                    0x4F,
+                    0x50,
+                ],
+                &[
+                    0x80 | 0x40 | 0x09,
+                    0xFF,
+                    0xFD,
+                    0x21,
+                    0x43,
+                    0xFE,
+                    0x51,
+                    0x52,
+                    0xFE,
+                    0x53,
+                    0x54,
+                    0xFE,
+                    0x55,
+                    0x56,
+                    0xFE,
+                    0x57,
+                    0x58,
+                    0xFE,
+                    0x59,
+                    0x5A,
+                    0xFE,
+                    0x61,
+                    0x62,
+                    0xFE,
+                    0x63,
+                    0x64,
+                    0xFE,
+                    0x65,
+                    0x0,
+                ],
+            ],
+            packets: &[PacketData {
+                sequence_no: 3,
+                services: &[ServiceData {
+                    service_no: 1,
+                    codes: &[
+                        tables::Code::LatinCapitalA,
+                        tables::Code::LatinCapitalB,
+                        tables::Code::LatinCapitalC,
+                        tables::Code::LatinCapitalD,
+                        tables::Code::LatinCapitalE,
+                        tables::Code::LatinCapitalF,
+                        tables::Code::LatinCapitalG,
+                        tables::Code::LatinCapitalH,
+                        tables::Code::LatinCapitalI,
+                        tables::Code::LatinCapitalJ,
+                        tables::Code::LatinCapitalK,
+                        tables::Code::LatinCapitalL,
+                        tables::Code::LatinCapitalM,
+                        tables::Code::LatinCapitalN,
+                        tables::Code::LatinCapitalO,
+                        tables::Code::LatinCapitalP,
+                        tables::Code::LatinCapitalQ,
+                        tables::Code::LatinCapitalR,
+                        tables::Code::LatinCapitalS,
+                        tables::Code::LatinCapitalT,
+                        tables::Code::LatinCapitalU,
+                        tables::Code::LatinCapitalV,
+                        tables::Code::LatinCapitalW,
+                        tables::Code::LatinCapitalX,
+                        tables::Code::LatinCapitalY,
+                        tables::Code::LatinCapitalZ,
+                        tables::Code::LatinLowerA,
+                        tables::Code::LatinLowerB,
+                        tables::Code::LatinLowerC,
+                        tables::Code::LatinLowerD,
+                        tables::Code::LatinLowerE,
+                    ],
+                }],
+            }],
+            cea608: &[&[Cea608::Field1(0x20, 0x42), Cea608::Field2(0x21, 0x43)]],
+        },
     ];
 
     #[test]
@@ -1281,8 +1390,8 @@ mod test {
             info!("writing {test_data:?}");
             let mut packet_iter = test_data.packets.iter();
             let mut cea608_iter = test_data.cea608.iter();
+            let mut writer = CCDataWriter::default();
             for cc_data in test_data.cc_data.iter() {
-                let mut writer = CCDataWriter::default();
                 if let Some(packet_data) = packet_iter.next() {
                     let mut pack = DTVCCPacket::new(packet_data.sequence_no);
                     for service_data in packet_data.services.iter() {
