@@ -11,6 +11,10 @@
 //!
 //! The reference for this implementation is the [ANSI/CTA-708-E R-2018](https://shop.cta.tech/products/digital-television-dtv-closed-captioning) specification.
 
+use std::time::Duration;
+
+use muldiv::MulDiv;
+
 #[macro_use]
 extern crate tracing;
 
@@ -48,10 +52,18 @@ impl From<tables::CodeError> for ParserError {
     }
 }
 
+/// Represents a CEA-608 compatibility byte pair
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Cea608 {
+    Field1(u8, u8),
+    Field2(u8, u8),
+}
+
 #[derive(Debug, Default)]
 pub struct CCDataParser {
     pending_data: Vec<u8>,
     packets: Vec<DTVCCPacket>,
+    cea608: Option<Vec<Cea608>>,
     have_initial_ccp_header: bool,
     ccp_bytes_needed: usize,
 }
@@ -60,6 +72,10 @@ impl CCDataParser {
     /// Create a new [CCDataParser]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn handle_cea608(&mut self) {
+        self.cea608 = Some(vec![]);
     }
 
     /// Push a complete `cc_data` packet into the parser for processing.
@@ -71,6 +87,10 @@ impl CCDataParser {
     /// after valid CEA-708 data will return [ParserError::IncorrectData].
     #[tracing::instrument(name = "CCDataParser::parse", skip(self, data))]
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
+        if let Some(ref mut cea608) = self.cea608 {
+            cea608.clear();
+        }
+
         if data.len() < 5 {
             // enough for 2 byte header plus 1 byte triple
             return Ok(());
@@ -111,47 +131,56 @@ impl CCDataParser {
             };
 
             // find the start of ccp in data
-            let ccp_offset = 2 + {
-                let mut ret = None;
-                for (i, triple) in data[2..].chunks_exact(3).enumerate() {
-                    trace!(
-                        "byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}",
+            let ccp_offset = 2
+                + {
+                    let mut ret = None;
+                    for (i, triple) in data[2..].chunks_exact(3).enumerate() {
+                        let cc_valid = (triple[0] & 0x04) == 0x04;
+                        let cc_type = triple[0] & 0x3;
+                        trace!(
+                        "byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}. valid: {cc_valid}, type: {cc_type}",
                         i * 3,
                         triple[0],
                         triple[1],
                         triple[2]
                     );
-                    let cc_valid = (triple[0] & 0x04) == 0x04;
-                    let cc_type = triple[0] & 0x3;
-                    if !in_dtvcc && cc_type == 0b00 || cc_type == 0b01 {
-                        // ignore 608-in-708 data
-                        continue;
-                    }
-                    if (cc_type & 0b10) > 0 {
-                        in_dtvcc = true;
-                    }
-                    if !cc_valid {
-                        continue;
+                        if (cc_type & 0b10) > 0 {
+                            in_dtvcc = true;
+                        }
+                        if !cc_valid {
+                            continue;
+                        }
+                        if !in_dtvcc && cc_type == 0b00 || cc_type == 0b01 {
+                            if let Some(ref mut cea608) = self.cea608 {
+                                let pair = match cc_type {
+                                    0b00 => Cea608::Field1(triple[1], triple[2]),
+                                    0b01 => Cea608::Field2(triple[1], triple[2]),
+                                    _ => unreachable!(),
+                                };
+                                cea608.push(pair);
+                            }
+                            continue;
+                        }
+
+                        if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                            // invalid packet construction;
+                            error!("cea608 bytes after cea708 data at byte:{}", i * 3);
+                            return Err(ParserError::IncorrectData);
+                        }
+
+                        if ret.is_none() {
+                            ret = Some(i * 3);
+                        }
                     }
 
-                    if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
-                        // invalid packet construction;
-                        error!("cea608 bytes after cea708 data at byte:{}", i * 3);
-                        return Err(ParserError::IncorrectData);
+                    if let Some(ret) = ret {
+                        ret
+                    } else {
+                        // no data to process
+                        return Ok(());
                     }
-
-                    if ret.is_none() {
-                        ret = Some(i * 3);
-                    }
-                }
-
-                if let Some(ret) = ret {
-                    ret
-                } else {
-                    // no data to process
-                    return Ok(());
-                }
-            };
+                };
+            trace!("ccp offset in input data is at index {ccp_offset}");
 
             let mut data_iter = pending_data.iter().chain(data[ccp_offset..].iter());
             let mut i = 0;
@@ -164,8 +193,8 @@ impl CCDataParser {
                     let cc_valid = (byte0 & 0x04) == 0x04;
                     let cc_type = byte0 & 0x3;
                     if !in_dtvcc && cc_type == 0b00 || cc_type == 0b01 {
-                        // ignore 608-in-708 data
-                        continue;
+                        // 608-in-708 data should not be hit as we skip over it
+                        unreachable!();
                     }
                     if (cc_type & 0b10) > 0 {
                         in_dtvcc = true;
@@ -237,6 +266,238 @@ impl CCDataParser {
         let ret = self.packets.pop();
         trace!("popped {ret:?}");
         ret
+    }
+
+    pub fn cea608(&mut self) -> Option<&[Cea608]> {
+        if let Some(ref cea608) = self.cea608 {
+            Some(cea608)
+        } else {
+            None
+        }
+    }
+}
+
+/// A framerate.  Framerates larger than 60fps are not well supported.
+#[derive(Debug)]
+pub struct Framerate {
+    numer: u32,
+    denom: u32,
+}
+
+impl Framerate {
+    /// Create a new [`Framerate`]
+    pub fn new(numer: u32, denom: u32) -> Self {
+        Self { numer, denom }
+    }
+
+    fn cea608_pairs_per_field(&self) -> usize {
+        // CEA-608 has a max bitrate of 960 bits/s for a single field
+        // TODO: handle alternating counts for 24fps
+        60.mul_div_round(self.denom, self.numer).unwrap() as usize
+    }
+
+    fn max_cc_count(&self) -> usize {
+        // CEA-708 has a max bitrate of 9_600 bits/s
+        600.mul_div_round(self.denom, self.numer).unwrap() as usize
+    }
+}
+
+/// A struct for writing cc_data packets
+#[derive(Debug, Default)]
+pub struct CCDataWriter {
+    // settings
+    output_cea608_padding: bool,
+    output_padding: bool,
+    // state
+    packets: Vec<DTVCCPacket>,
+    // part of a packet we could not fit into the previous packet
+    pending_packet_data: Vec<u8>,
+    cea608_1: Vec<(u8, u8)>,
+    cea608_2: Vec<(u8, u8)>,
+    last_cea608_was_field1: bool,
+}
+
+impl CCDataWriter {
+    /// Whether to output padding CEA-608 bytes when not enough enough data has been provided
+    pub fn set_output_cea608_padding(&mut self, output_cea608_padding: bool) {
+        self.output_cea608_padding = output_cea608_padding;
+    }
+
+    /// Whether padding CEA-608 bytes will be used
+    pub fn output_cea608_padding(&self) -> bool {
+        self.output_cea608_padding
+    }
+
+    /// Whether to output padding data in the CCP bitstream when not enough data has been provided
+    pub fn set_output_padding(&mut self, output_padding: bool) {
+        self.output_padding = output_padding;
+    }
+
+    /// Whether padding data will be produced in the CCP
+    pub fn output_padding(&self) -> bool {
+        self.output_padding
+    }
+
+    /// Push a [`DTVCCPacket`] for writing
+    pub fn push_packet(&mut self, packet: DTVCCPacket) {
+        self.packets.push(packet)
+    }
+
+    /// Push a [`Cea608`] byte pair for writing
+    pub fn push_cea608(&mut self, cea608: Cea608) {
+        match cea608 {
+            Cea608::Field1(byte0, byte1) => self.cea608_1.push((byte0, byte1)),
+            Cea608::Field2(byte0, byte1) => self.cea608_2.push((byte0, byte1)),
+        }
+    }
+
+    /// Clear all stored data
+    pub fn flush(&mut self) {
+        self.packets.clear();
+        self.pending_packet_data.clear();
+        self.cea608_1.clear();
+        self.cea608_2.clear();
+    }
+
+    /// The amount of time that is currently stored for CEA-608 field 1 data
+    pub fn buffered_cea608_field1_duration(&self) -> Duration {
+        // CEA-608 has a max bitrate of 60000 * 2 / 1001 bytes/s
+        Duration::from_micros(
+            (self.cea608_1.len() as u64)
+                .mul_div_ceil(1001 * 1_000_000, 60000)
+                .unwrap(),
+        )
+    }
+
+    /// The amount of time that is currently stored for CEA-608 field 2 data
+    pub fn buffered_cea608_field2_duration(&self) -> Duration {
+        // CEA-608 has a max bitrate of 60000 * 2 / 1001 bytes/s
+        Duration::from_micros(
+            (self.cea608_2.len() as u64)
+                .mul_div_ceil(1001 * 1_000_000, 60000)
+                .unwrap(),
+        )
+    }
+
+    fn buffered_packet_bytes(&self) -> usize {
+        self.pending_packet_data.len()
+            + self
+                .packets
+                .iter()
+                .map(|packet| packet.len())
+                .sum::<usize>()
+    }
+
+    /// The amount of time that is currently stored for CCP data
+    pub fn buffered_packet_duration(&self) -> Duration {
+        // CEA-708 has a max bitrate of 9600000 / 1001 bits/s
+        Duration::from_micros(
+            ((self.buffered_packet_bytes() + 1) as u64 / 2)
+                .mul_div_ceil(2 * 1001 * 1_000_000, 9_600_000 / 8)
+                .unwrap(),
+        )
+    }
+
+    /// Write the next cc_data packet taking the next relevant CEA-608 byte pairs and
+    /// [`DTVCCPacket`]s.  The framerate provided determines how many bytes are written.
+    pub fn write<W: std::io::Write>(
+        &mut self,
+        framerate: Framerate,
+        w: &mut W,
+    ) -> Result<(), std::io::Error> {
+        let mut cea608_pair_rem = if self.output_cea608_padding {
+            framerate.cea608_pairs_per_field()
+        } else {
+            framerate
+                .cea608_pairs_per_field()
+                .min(self.cea608_1.len().max(self.cea608_2.len() * 2))
+        };
+
+        let mut cc_count_rem = if self.output_padding {
+            framerate.max_cc_count()
+        } else {
+            framerate
+                .max_cc_count()
+                .min(cea608_pair_rem + self.packets.iter().map(|p| p.cc_count()).sum::<usize>())
+        };
+
+        let reserved = 0x80;
+        let process_cc_flag = 0x40;
+        w.write_all(&[
+            reserved | process_cc_flag | (cc_count_rem & 0x1f) as u8,
+            0xFF,
+        ])?;
+        while cc_count_rem > 0 {
+            if cea608_pair_rem > 0 {
+                trace!("attempting to write a cea608 packet");
+                if !self.last_cea608_was_field1 {
+                    if let Some((byte0, byte1)) = self.cea608_1.pop() {
+                        w.write_all(&[0xFC, byte0, byte1])?;
+                        cc_count_rem -= 1;
+                    } else if !self.cea608_2.is_empty() {
+                        // need to write valid field 0 if we are going to write field 1
+                        w.write_all(&[0xFC, 0x80, 0x80])?;
+                        cc_count_rem -= 1;
+                    } else if self.output_cea608_padding {
+                        w.write_all(&[0xF8, 0x80, 0x80])?;
+                        cc_count_rem -= 1;
+                    }
+                    self.last_cea608_was_field1 = true;
+                } else {
+                    if let Some((byte0, byte1)) = self.cea608_2.pop() {
+                        w.write_all(&[0xFD, byte0, byte1])?;
+                        cc_count_rem -= 1;
+                    } else if self.output_cea608_padding {
+                        w.write_all(&[0xF9, 0x80, 0x80])?;
+                        cc_count_rem -= 1;
+                    }
+                    self.last_cea608_was_field1 = false;
+                }
+                cea608_pair_rem -= 1;
+            } else {
+                let mut current_packet_data = &mut self.pending_packet_data;
+                let mut packet_offset = 0;
+                trace!(
+                    "1 pending data {} packet offset {}",
+                    current_packet_data.len(),
+                    packet_offset
+                );
+                while packet_offset >= current_packet_data.len() {
+                    if let Some(packet) = self.packets.pop() {
+                        trace!("starting packet {packet:?}");
+                        packet.write_as_cc_data(&mut current_packet_data)?;
+                    } else {
+                        trace!("no packet to write");
+                        break;
+                    }
+                }
+
+                trace!(
+                    "2 pending data {} packet offset {}",
+                    current_packet_data.len(),
+                    packet_offset
+                );
+                while packet_offset < current_packet_data.len() && cc_count_rem > 0 {
+                    assert!(current_packet_data.len() >= packet_offset + 3);
+                    w.write_all(&current_packet_data[packet_offset..packet_offset + 3])?;
+                    packet_offset += 3;
+                    cc_count_rem -= 1;
+                }
+
+                self.pending_packet_data = current_packet_data[packet_offset..].to_vec();
+
+                if self.packets.is_empty() && self.pending_packet_data.is_empty() {
+                    if self.output_padding {
+                        while cc_count_rem > 0 {
+                            w.write_all(&[0xFA, 0x00, 0x00])?;
+                            cc_count_rem -= 1;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -424,43 +685,19 @@ impl DTVCCPacket {
         Ok(())
     }
 
-    /// Write the [DTVCCPacket] bytestram encapsulated in the relevant cc_data bytes
-    ///
-    /// # Examples
-    /// ```
-    /// # use cea708_types::{*, tables::*};
-    /// let mut packet = DTVCCPacket::new(2);
-    /// let mut service = Service::new(1);
-    /// service.push_code(&Code::LatinCapitalA).unwrap();
-    /// packet.push_service(service);
-    /// let mut written = vec![];
-    /// packet.write_cc_data(&mut written);
-    /// let expected = [0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x82, 0x21, 0xFE, 0x41, 0x00];
-    /// assert_eq!(written, expected);
-    /// ```
     #[tracing::instrument(name = "DTVCCPacket::write_cc_data", skip(self, w))]
-    pub fn write_cc_data<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
+    fn write_as_cc_data<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
         // TODO: handle framerate?
         if self.services.is_empty() {
             return Ok(());
         }
-        let cc_count = (self.cc_count() & 0x1F) as u8;
-        trace!("cc_count:{cc_count}");
-        let reserved = 0x80;
-        let process_cc_flag = 0x40;
         let mut written = vec![];
         for service in self.services.iter() {
             service.write(&mut written)?;
             trace!("wrote service {service:?}");
         }
-        w.write_all(&[
-            reserved | process_cc_flag | cc_count,
-            0xFF,
-            0xFF,
-            self.hdr_byte(),
-            written[0],
-        ])?;
+        w.write_all(&[0xFF, self.hdr_byte(), written[0]])?;
         for pair in written[1..].chunks(2) {
             let cc_valid = 0x04;
             let cc_type = 0b10;
@@ -733,6 +970,7 @@ mod test {
     struct TestCCData<'a> {
         cc_data: &'a [&'a [u8]],
         packets: &'a [PacketData<'a>],
+        cea608: &'a [&'a [Cea608]],
     }
 
     static TEST_CC_DATA: [TestCCData; 6] = [
@@ -746,6 +984,7 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA],
                 }],
             }],
+            cea608: &[],
         },
         // simple packet with a single service and two codes
         TestCCData {
@@ -757,6 +996,7 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
                 }],
             }],
+            cea608: &[],
         },
         // two packets each with a single service and single code
         TestCCData {
@@ -780,6 +1020,7 @@ mod test {
                     }],
                 },
             ],
+            cea608: &[],
         },
         // two packets with a single service and one code split across both packets
         TestCCData {
@@ -794,6 +1035,7 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA],
                 }],
             }],
+            cea608: &[],
         },
         // simple packet with a single null service
         TestCCData {
@@ -802,6 +1044,7 @@ mod test {
                 sequence_no: 0,
                 services: &[],
             }],
+            cea608: &[],
         },
         // two packets with a single service and one code split across both packets with 608
         // padding data
@@ -811,11 +1054,11 @@ mod test {
                     0x80 | 0x40 | 0x03,
                     0xFF,
                     0xFC,
-                    0x80,
-                    0x80,
+                    0x61,
+                    0x62,
                     0xFD,
-                    0x80,
-                    0x80,
+                    0x63,
+                    0x64,
                     0xFF,
                     0x02,
                     0x21,
@@ -824,11 +1067,11 @@ mod test {
                     0x80 | 0x40 | 0x03,
                     0xFF,
                     0xFC,
-                    0x80,
-                    0x80,
+                    0x41,
+                    0x42,
                     0xFD,
-                    0x80,
-                    0x80,
+                    0x43,
+                    0x44,
                     0xFE,
                     0x41,
                     0x00,
@@ -841,6 +1084,10 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA],
                 }],
             }],
+            cea608: &[
+                &[Cea608::Field1(0x61, 0x62), Cea608::Field2(0x63, 0x64)],
+                &[Cea608::Field1(0x41, 0x42), Cea608::Field2(0x43, 0x44)],
+            ],
         },
     ];
 
@@ -850,8 +1097,13 @@ mod test {
         for (i, test_data) in TEST_CC_DATA.iter().enumerate() {
             info!("parsing {i}: {test_data:?}");
             let mut parser = CCDataParser::new();
+            if !test_data.cea608.is_empty() {
+                parser.handle_cea608();
+            }
             let mut expected_iter = test_data.packets.iter();
+            let mut cea608_iter = test_data.cea608.iter();
             for data in test_data.cc_data.iter() {
+                debug!("pushing {data:?}");
                 parser.push(data).unwrap();
                 while let Some(packet) = parser.pop_packet() {
                     let expected = expected_iter.next().unwrap();
@@ -865,13 +1117,15 @@ mod test {
                     }
                     assert!(expected_service_iter.next().is_none());
                 }
+                assert_eq!(parser.cea608().as_ref(), cea608_iter.next());
             }
             assert!(parser.pop_packet().is_none());
             assert!(expected_iter.next().is_none());
+            assert!(cea608_iter.next().is_none());
         }
     }
 
-    static WRITE_CC_DATA: [TestCCData; 3] = [
+    static WRITE_CC_DATA: [TestCCData; 5] = [
         // simple packet with a single service and single code
         TestCCData {
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
@@ -882,6 +1136,7 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA],
                 }],
             }],
+            cea608: &[],
         },
         // simple packet with a single service and two codes
         TestCCData {
@@ -893,6 +1148,7 @@ mod test {
                     codes: &[tables::Code::LatinCapitalA, tables::Code::LatinCapitalB],
                 }],
             }],
+            cea608: &[],
         },
         // packet with a full service service
         TestCCData {
@@ -990,6 +1246,19 @@ mod test {
                     ],
                 }],
             }],
+            cea608: &[],
+        },
+        // simple packet with only cea608 data
+        TestCCData {
+            cc_data: &[&[0x80 | 0x40 | 0x01, 0xFF, 0xFC, 0x41, 0x42]],
+            packets: &[],
+            cea608: &[&[Cea608::Field1(0x41, 0x42)]],
+        },
+        // simple packet with only cea608 field 1 data
+        TestCCData {
+            cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFC, 0x80, 0x80, 0xFD, 0x41, 0x42]],
+            packets: &[],
+            cea608: &[&[Cea608::Field2(0x41, 0x42)]],
         },
     ];
 
@@ -998,20 +1267,43 @@ mod test {
         test_init_log();
         for cc_data in WRITE_CC_DATA.iter() {
             info!("writing {cc_data:?}");
-            for (packet_data, cc_data) in cc_data.packets.iter().zip(cc_data.cc_data) {
-                let mut pack = DTVCCPacket::new(packet_data.sequence_no);
-                for service_data in packet_data.services.iter() {
-                    let mut service = Service::new(service_data.service_no);
-                    for code in service_data.codes.iter() {
-                        service.push_code(code).unwrap();
+            let mut packet_iter = cc_data.packets.iter();
+            let mut cea608_iter = cc_data.cea608.iter();
+            for cc_data in cc_data.cc_data.iter() {
+                let mut writer = CCDataWriter::default();
+                if let Some(packet_data) = packet_iter.next() {
+                    let mut pack = DTVCCPacket::new(packet_data.sequence_no);
+                    for service_data in packet_data.services.iter() {
+                        let mut service = Service::new(service_data.service_no);
+                        for code in service_data.codes.iter() {
+                            service.push_code(code).unwrap();
+                        }
+                        pack.push_service(service).unwrap();
                     }
-                    pack.push_service(service).unwrap();
+                    writer.push_packet(pack);
+                }
+                if let Some(&cea608) = cea608_iter.next() {
+                    for pair in cea608 {
+                        writer.push_cea608(*pair);
+                    }
                 }
                 let mut written = vec![];
-                pack.write_cc_data(&mut written).unwrap();
+                writer.write(Framerate::new(25, 1), &mut written).unwrap();
                 assert_eq!(cc_data, &written);
             }
         }
+    }
+
+    #[test]
+    fn framerate_cea608_pairs_per_field() {
+        assert_eq!(Framerate::new(60, 1).cea608_pairs_per_field(), 1);
+        assert_eq!(Framerate::new(30, 1).cea608_pairs_per_field(), 2);
+    }
+
+    #[test]
+    fn framerate_max_cc_count() {
+        assert_eq!(Framerate::new(60, 1).max_cc_count(), 10);
+        assert_eq!(Framerate::new(30, 1).max_cc_count(), 20);
     }
 }
 
