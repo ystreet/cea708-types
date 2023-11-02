@@ -278,7 +278,7 @@ impl CCDataParser {
 }
 
 /// A framerate.  Framerates larger than 60fps are not well supported.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Framerate {
     numer: u32,
     denom: u32,
@@ -286,7 +286,7 @@ pub struct Framerate {
 
 impl Framerate {
     /// Create a new [`Framerate`]
-    pub fn new(numer: u32, denom: u32) -> Self {
+    pub const fn new(numer: u32, denom: u32) -> Self {
         Self { numer, denom }
     }
 
@@ -968,6 +968,7 @@ mod test {
 
     #[derive(Debug)]
     struct TestCCData<'a> {
+        framerate: Framerate,
         cc_data: &'a [&'a [u8]],
         packets: &'a [PacketData<'a>],
         cea608: &'a [&'a [Cea608]],
@@ -976,6 +977,7 @@ mod test {
     static TEST_CC_DATA: [TestCCData; 6] = [
         // simple packet with a single service and single code
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
             packets: &[PacketData {
                 sequence_no: 0,
@@ -988,6 +990,7 @@ mod test {
         },
         // simple packet with a single service and two codes
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x22, 0xFE, 0x41, 0x42]],
             packets: &[PacketData {
                 sequence_no: 0,
@@ -1000,6 +1003,7 @@ mod test {
         },
         // two packets each with a single service and single code
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[
                 &[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00],
                 &[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x42, 0x21, 0xFE, 0x42, 0x00],
@@ -1024,6 +1028,7 @@ mod test {
         },
         // two packets with a single service and one code split across both packets
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[
                 &[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x02, 0x21],
                 &[0x80 | 0x40 | 0x01, 0xFF, 0xFE, 0x41, 0x00],
@@ -1039,6 +1044,7 @@ mod test {
         },
         // simple packet with a single null service
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x01, 0x00]],
             packets: &[PacketData {
                 sequence_no: 0,
@@ -1049,6 +1055,7 @@ mod test {
         // two packets with a single service and one code split across both packets with 608
         // padding data
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[
                 &[
                     0x80 | 0x40 | 0x03,
@@ -1128,6 +1135,7 @@ mod test {
     static WRITE_CC_DATA: [TestCCData; 5] = [
         // simple packet with a single service and single code
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x21, 0xFE, 0x41, 0x00]],
             packets: &[PacketData {
                 sequence_no: 0,
@@ -1140,6 +1148,7 @@ mod test {
         },
         // simple packet with a single service and two codes
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFF, 0x02, 0x22, 0xFE, 0x41, 0x42]],
             packets: &[PacketData {
                 sequence_no: 0,
@@ -1152,6 +1161,7 @@ mod test {
         },
         // packet with a full service service
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[
                 0x80 | 0x40 | 0x11,
                 0xFF,
@@ -1250,12 +1260,14 @@ mod test {
         },
         // simple packet with only cea608 data
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x01, 0xFF, 0xFC, 0x41, 0x42]],
             packets: &[],
             cea608: &[&[Cea608::Field1(0x41, 0x42)]],
         },
         // simple packet with only cea608 field 1 data
         TestCCData {
+            framerate: Framerate::new(25, 1),
             cc_data: &[&[0x80 | 0x40 | 0x02, 0xFF, 0xFC, 0x80, 0x80, 0xFD, 0x41, 0x42]],
             packets: &[],
             cea608: &[&[Cea608::Field2(0x41, 0x42)]],
@@ -1265,11 +1277,11 @@ mod test {
     #[test]
     fn packet_write_cc_data() {
         test_init_log();
-        for cc_data in WRITE_CC_DATA.iter() {
-            info!("writing {cc_data:?}");
-            let mut packet_iter = cc_data.packets.iter();
-            let mut cea608_iter = cc_data.cea608.iter();
-            for cc_data in cc_data.cc_data.iter() {
+        for test_data in WRITE_CC_DATA.iter() {
+            info!("writing {test_data:?}");
+            let mut packet_iter = test_data.packets.iter();
+            let mut cea608_iter = test_data.cea608.iter();
+            for cc_data in test_data.cc_data.iter() {
                 let mut writer = CCDataWriter::default();
                 if let Some(packet_data) = packet_iter.next() {
                     let mut pack = DTVCCPacket::new(packet_data.sequence_no);
@@ -1288,7 +1300,7 @@ mod test {
                     }
                 }
                 let mut written = vec![];
-                writer.write(Framerate::new(25, 1), &mut written).unwrap();
+                writer.write(test_data.framerate, &mut written).unwrap();
                 assert_eq!(cc_data, &written);
             }
         }
