@@ -277,7 +277,6 @@ pub enum Code {
     LatinLowerYWithAcute,
     LatinLowerThorn,
     LatinLowerYWithDiaeresis,
-    // TODO: more G1 code space
     Unknown(Vec<u8>),
 }
 
