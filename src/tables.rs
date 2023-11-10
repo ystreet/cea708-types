@@ -8,8 +8,13 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CodeError {
-    TooShort,
-    TooLong,
+    /// Length of data does not match length advertised
+    LengthMismatch {
+        /// The expected size
+        expected: usize,
+        /// The actual size
+        actual: usize,
+    },
 }
 
 /// Enum representing characters or commands accessible through the [Ext1] byte
@@ -1516,7 +1521,10 @@ macro_rules! write_control_code {
 impl Code {
     fn expected_size(bytes: &[u8]) -> Result<usize, CodeError> {
         if bytes.is_empty() {
-            return Err(CodeError::TooShort);
+            return Err(CodeError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         match bytes[0] {
             0x00..=0x0F => Ok(1),
@@ -1571,7 +1579,10 @@ impl Code {
     fn parse_element(data: &[u8]) -> Result<Code, CodeError> {
         let size = Code::expected_size(data)?;
         if data.len() > size {
-            return Err(CodeError::TooLong);
+            return Err(CodeError::LengthMismatch {
+                expected: size,
+                actual: data.len(),
+            });
         }
         if let Ok(idx) =
             CODE_MAP_TABLE.binary_search_by_key(&data, |code_map| code_map.cea708_bytes)
@@ -1616,7 +1627,10 @@ impl Code {
         while !data_iter.is_empty() {
             let size = Code::expected_size(data_iter)?;
             if data_iter.len() < size {
-                return Err(CodeError::TooShort);
+                return Err(CodeError::LengthMismatch {
+                    expected: size,
+                    actual: data_iter.len(),
+                });
             }
             let element = &data_iter[..size];
             let element = Code::parse_element(element)?;
@@ -1709,7 +1723,10 @@ impl Code {
 impl Ext1 {
     fn expected_size(bytes: &[u8]) -> Result<usize, CodeError> {
         if bytes.is_empty() {
-            return Err(CodeError::TooShort);
+            return Err(CodeError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         match bytes[0] {
             0x00..=0x07 => Ok(1),
@@ -1721,7 +1738,10 @@ impl Ext1 {
             0x88..=0x8F => Ok(6),
             0x90..=0x9F => {
                 if bytes.len() < 2 {
-                    return Err(CodeError::TooShort);
+                    return Err(CodeError::LengthMismatch {
+                        expected: 2,
+                        actual: 0,
+                    });
                 }
                 Ok(((bytes[1] & 0x3F) as usize) + 1)
             }

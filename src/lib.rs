@@ -23,9 +23,18 @@ pub mod tables;
 /// Various possible errors when parsing data
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ParserError {
-    TooShort,
-    LengthMismatch,
-    IncorrectData,
+    /// Length of data does not match length advertised
+    LengthMismatch {
+        /// The expected size
+        expected: usize,
+        /// The actual size
+        actual: usize,
+    },
+    /// CEA-608 comaptibility bytes encountered after CEA-708
+    Cea608AfterCea708 {
+        /// Position of the offending bytes
+        byte_pos: usize,
+    },
 }
 
 impl std::fmt::Display for ParserError {
@@ -46,8 +55,9 @@ pub enum WriterError {
 impl From<tables::CodeError> for ParserError {
     fn from(err: tables::CodeError) -> Self {
         match err {
-            tables::CodeError::TooShort => ParserError::TooShort,
-            tables::CodeError::TooLong => ParserError::LengthMismatch,
+            tables::CodeError::LengthMismatch { expected, actual } => {
+                ParserError::LengthMismatch { expected, actual }
+            }
         }
     }
 }
@@ -84,7 +94,7 @@ impl CCDataParser {
     /// number of cc triples specified in the `cc_data` header.
     ///
     /// Ignores any CEA-608 data provided at the start of the data.  Any CEA-608 data provided
-    /// after valid CEA-708 data will return [ParserError::IncorrectData].
+    /// after valid CEA-708 data will return [ParserError::Cea608AfterCea708].
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
         trace!("parsing {data:?}");
         if let Some(ref mut cea608) = self.cea608 {
@@ -106,7 +116,10 @@ impl CCDataParser {
         }
         trace!("cc_count: {cc_count}, len = {}", data.len());
         if (cc_count * 3 + 2) as usize != data.len() {
-            return Err(ParserError::LengthMismatch);
+            return Err(ParserError::LengthMismatch {
+                expected: (cc_count * 3 + 1) as usize,
+                actual: data.len(),
+            });
         }
 
         let mut ccp_data = {
@@ -170,7 +183,7 @@ impl CCDataParser {
                         if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
                             // invalid packet construction;
                             warn!("cea608 bytes after cea708 data at byte:{}", i * 3);
-                            return Err(ParserError::IncorrectData);
+                            return Err(ParserError::Cea608AfterCea708 { byte_pos: i * 3 });
                         }
 
                         if ret.is_none() {
@@ -215,8 +228,7 @@ impl CCDataParser {
                         // a header byte truncates the size of any previous packet
                         match DTVCCPacket::parse(&ccp_data) {
                             Ok(packet) => self.packets.push(packet),
-                            Err(ParserError::TooShort) => (),
-                            Err(ParserError::LengthMismatch) => (),
+                            Err(ParserError::LengthMismatch { .. }) => (),
                             Err(e) => {
                                 eprintln!("{e:?}");
                                 unreachable!()
@@ -250,8 +262,7 @@ impl CCDataParser {
         if self.ccp_bytes_needed == 0 {
             match DTVCCPacket::parse(&ccp_data) {
                 Ok(packet) => self.packets.push(packet),
-                Err(ParserError::TooShort) => (),
-                Err(ParserError::LengthMismatch) => (),
+                Err(ParserError::LengthMismatch { .. }) => (),
                 _ => unreachable!(),
             }
             ccp_data = vec![];
@@ -613,7 +624,7 @@ impl DTVCCPacket {
 
     /// Parse bytes into a [DTVCCPacket]
     ///
-    /// Will return [ParserError::TooShort] if the data is shorter than the length advertised in
+    /// Will return [ParserError::LengthMismatch] if the data is shorter than the length advertised in
     /// the [DTVCCPacket] header.
     ///
     /// Will return errors from [Service::parse] if parsing the contained [Service]s fails.
@@ -628,7 +639,10 @@ impl DTVCCPacket {
     /// ```
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
         if data.is_empty() {
-            return Err(ParserError::TooShort);
+            return Err(ParserError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         let (seq_no, len) = Self::parse_hdr_byte(data[0]);
         trace!(
@@ -636,7 +650,10 @@ impl DTVCCPacket {
             data_len = data.len()
         );
         if (len + 1) < data.len() {
-            return Err(ParserError::TooShort);
+            return Err(ParserError::LengthMismatch {
+                expected: len + 1,
+                actual: data.len(),
+            });
         }
 
         let mut offset = 1;
@@ -836,7 +853,7 @@ impl Service {
     ///
     /// # Errors
     ///
-    /// * [ParserError::TooShort] if the length of the data is less than the size advertised in the
+    /// * [ParserError::LengthMismatch] if the length of the data is less than the size advertised in the
     /// header
     ///
     /// # Examples
@@ -848,32 +865,40 @@ impl Service {
     /// assert_eq!(service.codes()[0], Code::LatinCapitalA);
     /// ```
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
-        let mut iter_data = data;
         if data.is_empty() {
-            return Err(ParserError::TooShort);
+            return Err(ParserError::LengthMismatch {
+                expected: 1,
+                actual: 0,
+            });
         }
         let byte = data[0];
-        iter_data = &iter_data[1..];
         let mut service_no = (byte & 0xE0) >> 5;
         let block_size = (byte & 0x1F) as usize;
+        let mut idx = 1;
         trace!("block_size: {block_size}");
         if service_no == 7 && block_size != 0 {
             if data.len() == 1 {
-                return Err(ParserError::TooShort);
+                return Err(ParserError::LengthMismatch {
+                    expected: 2,
+                    actual: data.len(),
+                });
             }
             let byte2 = data[1];
             service_no = byte2 & 0x3F;
-            iter_data = &iter_data[1..];
+            idx += 1;
         }
 
-        if iter_data.len() < block_size {
-            return Err(ParserError::TooShort);
+        if data.len() < idx + block_size {
+            return Err(ParserError::LengthMismatch {
+                expected: idx + block_size,
+                actual: data.len(),
+            });
         }
 
         if service_no != 0 {
             Ok(Self {
                 number: service_no,
-                codes: tables::Code::from_data(&iter_data[..block_size])?,
+                codes: tables::Code::from_data(&data[idx..idx + block_size])?,
             })
         } else {
             Ok(Self {
