@@ -189,6 +189,7 @@ impl CCDataParser {
 
             let mut data_iter = pending_data.iter().chain(data[ccp_offset..].iter());
             let mut i = 0;
+            in_dtvcc = false;
             loop {
                 let byte0 = data_iter.next();
                 let byte1 = data_iter.next();
@@ -197,15 +198,15 @@ impl CCDataParser {
                 if let (Some(byte0), Some(byte1), Some(byte2)) = (byte0, byte1, byte2) {
                     let cc_valid = (byte0 & 0x04) == 0x04;
                     let cc_type = byte0 & 0x3;
-                    if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
-                        // 608-in-708 data should not be hit as we skip over it
-                        unreachable!();
-                    }
                     if (cc_type & 0b10) > 0 {
                         in_dtvcc = true;
                     }
                     if !cc_valid {
                         continue;
+                    }
+                    if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                        // 608-in-708 data should not be hit as we skip over it
+                        unreachable!();
                     }
 
                     if (cc_type & 0b11) == 0b11 {
