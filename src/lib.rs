@@ -150,7 +150,12 @@ impl CCDataParser {
                         if !cc_valid {
                             continue;
                         }
-                        if !in_dtvcc && cc_type == 0b00 || cc_type == 0b01 {
+                        if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                            trace!(
+                                "have cea608 bytes type {cc_type} 0x{:02x} 0x{:02x}",
+                                triple[1],
+                                triple[2]
+                            );
                             if let Some(ref mut cea608) = self.cea608 {
                                 let pair = match cc_type {
                                     0b00 => Cea608::Field1(triple[1], triple[2]),
@@ -192,7 +197,7 @@ impl CCDataParser {
                 if let (Some(byte0), Some(byte1), Some(byte2)) = (byte0, byte1, byte2) {
                     let cc_valid = (byte0 & 0x04) == 0x04;
                     let cc_type = byte0 & 0x3;
-                    if !in_dtvcc && cc_type == 0b00 || cc_type == 0b01 {
+                    if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
                         // 608-in-708 data should not be hit as we skip over it
                         unreachable!();
                     }
