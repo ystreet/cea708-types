@@ -874,6 +874,10 @@ impl Service {
             iter_data = &iter_data[1..];
         }
 
+        if iter_data.len() < block_size {
+            return Err(ParserError::TooShort);
+        }
+
         if service_no != 0 {
             Ok(Self {
                 number: service_no,
