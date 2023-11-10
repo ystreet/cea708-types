@@ -169,7 +169,7 @@ impl CCDataParser {
 
                         if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
                             // invalid packet construction;
-                            error!("cea608 bytes after cea708 data at byte:{}", i * 3);
+                            warn!("cea608 bytes after cea708 data at byte:{}", i * 3);
                             return Err(ParserError::IncorrectData);
                         }
 
