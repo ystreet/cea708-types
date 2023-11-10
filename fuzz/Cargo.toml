@@ -26,3 +26,9 @@ name = "code_from_bytes"
 path = "fuzz_targets/code_from_bytes.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "cc_data_from_bytes"
+path = "fuzz_targets/cc_data_from_bytes.rs"
+test = false
+doc = false
