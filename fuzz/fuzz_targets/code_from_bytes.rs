@@ -6,14 +6,11 @@ use cea708_types::tables::Code;
 use once_cell::sync::Lazy;
 
 #[macro_use]
-extern crate tracing;
-use tracing_subscriber::EnvFilter;
+extern crate log;
 
 pub fn debug_init() {
     static TRACING: Lazy<()> = Lazy::new(|| {
-        if let Ok(filter) = EnvFilter::try_from_default_env() {
-            tracing_subscriber::fmt().with_env_filter(filter).init();
-        }
+        env_logger::init();
     });
 
     Lazy::force(&TRACING);

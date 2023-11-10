@@ -16,7 +16,7 @@ use std::time::Duration;
 use muldiv::MulDiv;
 
 #[macro_use]
-extern crate tracing;
+extern crate log;
 
 pub mod tables;
 
@@ -85,8 +85,8 @@ impl CCDataParser {
     ///
     /// Ignores any CEA-608 data provided at the start of the data.  Any CEA-608 data provided
     /// after valid CEA-708 data will return [ParserError::IncorrectData].
-    #[tracing::instrument(name = "CCDataParser::parse", skip(self, data))]
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
+        trace!("parsing {data:?}");
         if let Some(ref mut cea608) = self.cea608 {
             cea608.clear();
         }
@@ -626,7 +626,6 @@ impl DTVCCPacket {
     /// assert_eq!(3, packet.len());
     /// assert_eq!(0, packet.sequence_no());
     /// ```
-    #[tracing::instrument(name = "DTVCCPacket::parse", err)]
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
         if data.is_empty() {
             return Err(ParserError::TooShort);
@@ -699,7 +698,6 @@ impl DTVCCPacket {
         Ok(())
     }
 
-    #[tracing::instrument(name = "DTVCCPacket::write_cc_data", skip(self, w))]
     fn write_as_cc_data<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
         // TODO: handle framerate?
@@ -818,12 +816,6 @@ impl Service {
     /// let mut service = Service::new(1);
     /// service.push_code(&Code::LatinCapitalA).unwrap();
     /// ```
-    #[tracing::instrument(
-        skip(self),
-        fields(
-            service_no = self.number
-        )
-    )]
     pub fn push_code(&mut self, code: &tables::Code) -> Result<(), WriterError> {
         // TODO: errors?
         if self.number == 0 {
@@ -855,7 +847,6 @@ impl Service {
     /// assert_eq!(service.number(), 1);
     /// assert_eq!(service.codes()[0], Code::LatinCapitalA);
     /// ```
-    #[tracing::instrument(name = "Service::parse", err)]
     pub fn parse(data: &[u8]) -> Result<Self, ParserError> {
         let mut iter_data = data;
         if data.is_empty() {
@@ -1458,12 +1449,9 @@ mod test {
 #[cfg(test)]
 pub(crate) mod tests {
     use once_cell::sync::Lazy;
-    use tracing_subscriber::EnvFilter;
 
     static TRACING: Lazy<()> = Lazy::new(|| {
-        if let Ok(filter) = EnvFilter::try_from_default_env() {
-            tracing_subscriber::fmt().with_env_filter(filter).init();
-        }
+        env_logger::init();
     });
 
     pub fn test_init_log() {
