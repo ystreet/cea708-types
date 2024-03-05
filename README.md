@@ -1,4 +1,4 @@
-[![Build status](https://github.com/ystreet/cea708-types/workflows/Build/badge.svg?branch=main)](https://github.com/ystreet/cea708-types/actions)
+[![Build status](https://github.com/ystreet/cea708-types/actions/workflows/rust.yml/badge.svg?branch=main)](https://github.com/ystreet/cea708-types/actions)
 [![Dependencies](https://deps.rs/repo/github/ystreet/cea708-types/status.svg)](https://deps.rs/repo/github/ystreet/cea708-types)
 [![crates.io](https://img.shields.io/crates/v/cea708-types.svg)](https://crates.io/crates/cea708-types)
 [![docs.rs](https://docs.rs/cea708-types/badge.svg)](https://docs.rs/cea708-types)
