@@ -21,9 +21,10 @@ extern crate log;
 pub mod tables;
 
 /// Various possible errors when parsing data
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum ParserError {
     /// Length of data does not match length advertised
+    #[error("The length of the data ({actual}) does not match the advertised expected ({expected}) length")]
     LengthMismatch {
         /// The expected size
         expected: usize,
@@ -31,24 +32,21 @@ pub enum ParserError {
         actual: usize,
     },
     /// CEA-608 comaptibility bytes encountered after CEA-708
+    #[error("CEA-608 compatibility bytes were found after CEA-708 bytes at position {byte_pos}")]
     Cea608AfterCea708 {
         /// Position of the offending bytes
         byte_pos: usize,
     },
 }
 
-impl std::fmt::Display for ParserError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.pad(&format!("{self:?}"))
-    }
-}
-
 /// An error enum returned when writing data fails
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum WriterError {
     /// Writing would overflow by how many bytes
+    #[error("Writing the data would overflow by {0} bytes")]
     WouldOverflow(usize),
     /// It is not possible to write to this resource
+    #[error("The resource is not writable")]
     ReadOnly,
 }
 

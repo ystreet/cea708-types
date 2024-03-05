@@ -6,9 +6,10 @@
 
 //! Module for the various [Code] tables available
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum CodeError {
     /// Length of data does not match length advertised
+    #[error("The length of the data ({actual}) does not match the advertised expected ({expected}) length")]
     LengthMismatch {
         /// The expected size
         expected: usize,
