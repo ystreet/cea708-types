@@ -12,7 +12,8 @@ repository = "https://github.com/ystreet/cea708-types"
 rust-version = "1.63.0"
 
 [dependencies]
-once_cell = "1"
-muldiv = "1"
-log = "0.4"
 env_logger = "0.10"
+log = "0.4"
+muldiv = "1"
+once_cell = "1"
+thiserror = "1"
