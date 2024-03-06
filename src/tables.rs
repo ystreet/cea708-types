@@ -958,6 +958,12 @@ impl From<u8> for Color {
 }
 
 impl Color {
+    pub const BLACK: Color = Color::new(ColorValue::None, ColorValue::None, ColorValue::None);
+    pub const WHITE: Color = Color::new(ColorValue::Full, ColorValue::Full, ColorValue::Full);
+    pub const RED: Color = Color::new(ColorValue::Full, ColorValue::None, ColorValue::None);
+    pub const GREEN: Color = Color::new(ColorValue::None, ColorValue::Full, ColorValue::None);
+    pub const BLUE: Color = Color::new(ColorValue::None, ColorValue::None, ColorValue::Full);
+
     pub const fn new(r: ColorValue, g: ColorValue, b: ColorValue) -> Self {
         Self { r, g, b }
     }
