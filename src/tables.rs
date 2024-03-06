@@ -336,6 +336,14 @@ impl WindowBits {
     pub const fn not(self) -> Self {
         Self(!self.0)
     }
+
+    /// Create a [`WindowBits`] from a window identifier.
+    ///
+    /// Panics if window_id >= 8
+    pub const fn from_window_id(window_id: u8) -> Self {
+        assert!(window_id < 8);
+        Self(1 << window_id)
+    }
 }
 
 impl std::ops::BitOr for WindowBits {
