@@ -1453,7 +1453,7 @@ impl From<SetPenColorArgs> for [u8; 3] {
 }
 
 /// Arguments required for the [Code::SetPenLocation] command
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct SetPenLocationArgs {
     pub row: u8,    // [0, 14]
     pub column: u8, // [0, 31/41]
