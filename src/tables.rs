@@ -523,7 +523,255 @@ impl DefineWindowArgs {
             pen_style_id,
         }
     }
+
+    /// Retrieve the default window attributes for this [`DefineWindowArgs`]
+    pub fn window_attributes(&self) -> SetWindowAttributesArgs {
+        PREDEFINED_WINDOW_STYLES[self.window_style_id as usize - 1]
+    }
+
+    /// Retrieve the default pen attributes for this [`DefineWindowArgs`]
+    pub fn pen_attributes(&self) -> SetPenAttributesArgs {
+        PREDEFINED_PEN_STYLES_ATTRIBUTES[self.pen_style_id as usize - 1]
+    }
+
+    /// Retrieve the default pen color for this [`DefineWindowArgs`]
+    pub fn pen_color(&self) -> SetPenColorArgs {
+        PREDEFINED_PEN_STYLES_COLOR[self.pen_style_id as usize - 1]
+    }
 }
+
+static PREDEFINED_WINDOW_STYLES: [SetWindowAttributesArgs; 7] = [
+    // style 1
+    SetWindowAttributesArgs {
+        justify: Justify::Left,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: false,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Solid,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style w
+    SetWindowAttributesArgs {
+        justify: Justify::Left,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: false,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Transparent,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style 3
+    SetWindowAttributesArgs {
+        justify: Justify::Center,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: false,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Solid,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style 4
+    SetWindowAttributesArgs {
+        justify: Justify::Left,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: true,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Solid,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style 5
+    SetWindowAttributesArgs {
+        justify: Justify::Left,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: true,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Transparent,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style 6
+    SetWindowAttributesArgs {
+        justify: Justify::Center,
+        print_direction: Direction::LeftToRight,
+        scroll_direction: Direction::BottomToTop,
+        wordwrap: true,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Solid,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+    // style 7
+    SetWindowAttributesArgs {
+        justify: Justify::Left,
+        print_direction: Direction::TopToBottom,
+        scroll_direction: Direction::RightToLeft,
+        wordwrap: false,
+        display_effect: DisplayEffect::Snap,
+        effect_direction: Direction::LeftToRight,
+        effect_speed: 1,
+        fill_color: Color::BLACK,
+        fill_opacity: Opacity::Solid,
+        border_type: BorderType::None,
+        border_color: Color::BLACK,
+    },
+];
+
+static PREDEFINED_PEN_STYLES_ATTRIBUTES: [SetPenAttributesArgs; 7] = [
+    // style 1
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::Default,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::None,
+    },
+    // style 2
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::MonospacedWithSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::None,
+    },
+    // style 3
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::ProportionallySpacedWithSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::None,
+    },
+    // style 4
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::MonospacedWithoutSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::None,
+    },
+    // style 5
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::ProportionallySpacedWithoutSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::None,
+    },
+    // style 6
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::MonospacedWithoutSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::Uniform,
+    },
+    // style 7
+    SetPenAttributesArgs {
+        pen_size: PenSize::Standard,
+        font_style: FontStyle::ProportionallySpacedWithoutSerifs,
+        text_tag: TextTag::Dialog,
+        offset: TextOffset::Normal,
+        italics: false,
+        underline: false,
+        edge_type: EdgeType::Uniform,
+    },
+];
+
+static PREDEFINED_PEN_STYLES_COLOR: [SetPenColorArgs; 7] = [
+    // style 1
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Solid,
+        edge_color: Color::BLACK,
+    },
+    // style 2
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Solid,
+        edge_color: Color::BLACK,
+    },
+    // style 3
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Solid,
+        edge_color: Color::BLACK,
+    },
+    // style 4
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Solid,
+        edge_color: Color::BLACK,
+    },
+    // style 5
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Solid,
+        edge_color: Color::BLACK,
+    },
+    // style 6
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Transparent,
+        edge_color: Color::BLACK,
+    },
+    // style 7
+    SetPenColorArgs {
+        foreground_color: Color::WHITE,
+        foreground_opacity: Opacity::Solid,
+        background_color: Color::BLACK,
+        background_opacity: Opacity::Transparent,
+        edge_color: Color::BLACK,
+    },
+];
 
 /// Text tustification options
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
