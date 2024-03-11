@@ -11,6 +11,7 @@
 //!
 //! The reference for this implementation is the [ANSI/CTA-708-E R-2018](https://shop.cta.tech/products/digital-television-dtv-closed-captioning) specification.
 
+use std::collections::VecDeque;
 use std::time::Duration;
 
 use muldiv::MulDiv;
@@ -70,7 +71,7 @@ pub enum Cea608 {
 #[derive(Debug, Default)]
 pub struct CCDataParser {
     pending_data: Vec<u8>,
-    packets: Vec<DTVCCPacket>,
+    packets: VecDeque<DTVCCPacket>,
     cea608: Option<Vec<Cea608>>,
     have_initial_ccp_header: bool,
     ccp_bytes_needed: usize,
@@ -225,7 +226,7 @@ impl CCDataParser {
                         self.have_initial_ccp_header = true;
                         // a header byte truncates the size of any previous packet
                         match DTVCCPacket::parse(&ccp_data) {
-                            Ok(packet) => self.packets.push(packet),
+                            Ok(packet) => self.packets.push_front(packet),
                             Err(ParserError::LengthMismatch { .. }) => (),
                             Err(e) => {
                                 eprintln!("{e:?}");
@@ -259,7 +260,7 @@ impl CCDataParser {
 
         if self.ccp_bytes_needed == 0 {
             match DTVCCPacket::parse(&ccp_data) {
-                Ok(packet) => self.packets.push(packet),
+                Ok(packet) => self.packets.push_front(packet),
                 Err(ParserError::LengthMismatch { .. }) => (),
                 _ => unreachable!(),
             }
@@ -278,7 +279,7 @@ impl CCDataParser {
 
     /// Pop a valid [DTVCCPacket] or None if no packet could be parsed
     pub fn pop_packet(&mut self) -> Option<DTVCCPacket> {
-        let ret = self.packets.pop();
+        let ret = self.packets.pop_back();
         trace!("popped {ret:?}");
         ret
     }
@@ -334,7 +335,7 @@ pub struct CCDataWriter {
     output_cea608_padding: bool,
     output_padding: bool,
     // state
-    packets: Vec<DTVCCPacket>,
+    packets: VecDeque<DTVCCPacket>,
     // part of a packet we could not fit into the previous packet
     pending_packet_data: Vec<u8>,
     cea608_1: Vec<(u8, u8)>,
@@ -365,7 +366,7 @@ impl CCDataWriter {
 
     /// Push a [`DTVCCPacket`] for writing
     pub fn push_packet(&mut self, packet: DTVCCPacket) {
-        self.packets.push(packet)
+        self.packets.push_front(packet)
     }
 
     /// Push a [`Cea608`] byte pair for writing
@@ -487,7 +488,7 @@ impl CCDataWriter {
                 let mut current_packet_data = &mut self.pending_packet_data;
                 let mut packet_offset = 0;
                 while packet_offset >= current_packet_data.len() {
-                    if let Some(packet) = self.packets.pop() {
+                    if let Some(packet) = self.packets.pop_back() {
                         trace!("starting packet {packet:?}");
                         packet.write_as_cc_data(&mut current_packet_data)?;
                     } else {
@@ -1006,7 +1007,7 @@ mod test {
         cea608: &'a [&'a [Cea608]],
     }
 
-    static TEST_CC_DATA: [TestCCData; 6] = [
+    static TEST_CC_DATA: [TestCCData; 8] = [
         // simple packet with a single service and single code
         TestCCData {
             framerate: Framerate::new(25, 1),
@@ -1082,6 +1083,74 @@ mod test {
                 sequence_no: 0,
                 services: &[],
             }],
+            cea608: &[],
+        },
+        // DTVCCPacket with two services
+        TestCCData {
+            framerate: Framerate::new(25, 1),
+            cc_data: &[&[
+                0x80 | 0x40 | 0x03,
+                0xFF,
+                0xFF,
+                0x03,
+                0x21,
+                0xFE,
+                0x41,
+                0x41,
+                0xFE,
+                0x42,
+                0x00,
+            ]],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[
+                    ServiceData {
+                        service_no: 1,
+                        codes: &[tables::Code::LatinCapitalA],
+                    },
+                    ServiceData {
+                        service_no: 2,
+                        codes: &[tables::Code::LatinCapitalB],
+                    },
+                ],
+            }],
+            cea608: &[],
+        },
+        // cc_data with two DTVCCPacket
+        TestCCData {
+            framerate: Framerate::new(25, 1),
+            cc_data: &[&[
+                0x80 | 0x40 | 0x04,
+                0xFF,
+                0xFF,
+                0x02,
+                0x21,
+                0xFE,
+                0x41,
+                0x00,
+                0xFF,
+                0x42,
+                0x41,
+                0xFE,
+                0x42,
+                0x00,
+            ]],
+            packets: &[
+                PacketData {
+                    sequence_no: 0,
+                    services: &[ServiceData {
+                        service_no: 1,
+                        codes: &[tables::Code::LatinCapitalA],
+                    }],
+                },
+                PacketData {
+                    sequence_no: 1,
+                    services: &[ServiceData {
+                        service_no: 2,
+                        codes: &[tables::Code::LatinCapitalB],
+                    }],
+                },
+            ],
             cea608: &[],
         },
         // two packets with a single service and one code split across both packets with 608
