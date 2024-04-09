@@ -534,17 +534,17 @@ impl DefineWindowArgs {
 
     /// Retrieve the default window attributes for this [`DefineWindowArgs`]
     pub fn window_attributes(&self) -> SetWindowAttributesArgs {
-        PREDEFINED_WINDOW_STYLES[self.window_style_id as usize - 1]
+        PREDEFINED_WINDOW_STYLES[self.window_style_id.max(1) as usize - 1]
     }
 
     /// Retrieve the default pen attributes for this [`DefineWindowArgs`]
     pub fn pen_attributes(&self) -> SetPenAttributesArgs {
-        PREDEFINED_PEN_STYLES_ATTRIBUTES[self.pen_style_id as usize - 1]
+        PREDEFINED_PEN_STYLES_ATTRIBUTES[self.pen_style_id.max(1) as usize - 1]
     }
 
     /// Retrieve the default pen color for this [`DefineWindowArgs`]
     pub fn pen_color(&self) -> SetPenColorArgs {
-        PREDEFINED_PEN_STYLES_COLOR[self.pen_style_id as usize - 1]
+        PREDEFINED_PEN_STYLES_COLOR[self.pen_style_id.max(1) as usize - 1]
     }
 }
 
@@ -563,7 +563,7 @@ static PREDEFINED_WINDOW_STYLES: [SetWindowAttributesArgs; 7] = [
         border_type: BorderType::None,
         border_color: Color::BLACK,
     },
-    // style w
+    // style 2
     SetWindowAttributesArgs {
         justify: Justify::Left,
         print_direction: Direction::LeftToRight,
@@ -2177,5 +2177,32 @@ mod test {
                 assert_eq!(written, code_map.cea708_bytes);
             }
         }
+    }
+
+    #[test]
+    fn define_zero_style_id() {
+        test_init_log();
+        let define = DefineWindowArgs::new(
+            0,
+            0,
+            Anchor::BottomMiddle,
+            true,
+            100,
+            50,
+            11,
+            31,
+            true,
+            true,
+            true,
+            0,
+            0,
+        );
+        let win_attrs = define.window_attributes();
+        assert_eq!(win_attrs.fill_opacity, Opacity::Solid);
+        assert_eq!(win_attrs.fill_color, Color::BLACK);
+        let pen_attrs = define.pen_attributes();
+        assert_eq!(pen_attrs.font_style, FontStyle::Default);
+        let pen_color = define.pen_color();
+        assert_eq!(pen_color, PREDEFINED_PEN_STYLES_COLOR[0]);
     }
 }
