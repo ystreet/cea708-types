@@ -16,8 +16,7 @@ use std::time::Duration;
 
 use muldiv::MulDiv;
 
-#[macro_use]
-extern crate log;
+use log::{debug, trace, warn};
 
 pub mod tables;
 
@@ -1201,7 +1200,7 @@ mod test {
     fn cc_data_parse() {
         test_init_log();
         for (i, test_data) in TEST_CC_DATA.iter().enumerate() {
-            info!("parsing {i}: {test_data:?}");
+            log::info!("parsing {i}: {test_data:?}");
             let mut parser = CCDataParser::new();
             if !test_data.cea608.is_empty() {
                 parser.handle_cea608();
@@ -1488,7 +1487,7 @@ mod test {
     fn packet_write_cc_data() {
         test_init_log();
         for test_data in WRITE_CC_DATA.iter() {
-            info!("writing {test_data:?}");
+            log::info!("writing {test_data:?}");
             let mut packet_iter = test_data.packets.iter();
             let mut cea608_iter = test_data.cea608.iter();
             let mut writer = CCDataWriter::default();
