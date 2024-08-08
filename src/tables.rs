@@ -2038,6 +2038,7 @@ impl Ext1 {
 mod test {
     use super::*;
     use crate::tests::*;
+    use log::trace;
 
     #[test]
     fn codes_table_ordered() {
