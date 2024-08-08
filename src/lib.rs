@@ -287,11 +287,7 @@ impl CCDataParser {
 
     /// Any [`Cea608`] bytes in the last parsed `cc_data`
     pub fn cea608(&mut self) -> Option<&[Cea608]> {
-        if let Some(ref cea608) = self.cea608 {
-            Some(cea608)
-        } else {
-            None
-        }
+        self.cea608.as_deref()
     }
 }
 
