@@ -121,142 +121,135 @@ impl CCDataParser {
             });
         }
 
-        let mut ccp_data = {
-            let mut in_dtvcc = false;
-            let mut ccp_data = vec![];
+        let mut ccp_data = vec![];
+        let mut in_dtvcc = false;
 
-            // re-add first byte to pending_data
-            let pending_data = {
-                let mut ret = vec![];
-                for (i, d) in self.pending_data.chunks(2).enumerate() {
-                    if i == 0 {
-                        ret.push(0xFF);
-                    } else {
-                        ret.push(0xFE);
-                    }
-                    ret.extend(d);
-                    if d.len() == 1 {
-                        ret.push(0x00);
-                    }
+        // re-add first byte to pending_data
+        let mut pending_data = vec![];
+        for (i, d) in self.pending_data.chunks(2).enumerate() {
+            if i == 0 {
+                pending_data.push(0xFF);
+            } else {
+                pending_data.push(0xFE);
+            }
+            pending_data.extend(d);
+            if d.len() == 1 {
+                pending_data.push(0x00);
+            }
+        }
+
+        // find the start of ccp in data
+        let ccp_offset;
+        {
+            let mut ret = None;
+            for (i, triple) in data[2..].chunks_exact(3).enumerate() {
+                let cc_valid = (triple[0] & 0x04) == 0x04;
+                let cc_type = triple[0] & 0x3;
+                trace!(
+                    "byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}. valid: {cc_valid}, type: {cc_type}",
+                    i * 3,
+                    triple[0],
+                    triple[1],
+                    triple[2]
+                );
+                if (cc_type & 0b10) > 0 {
+                    in_dtvcc = true;
                 }
-                ret
-            };
-
-            // find the start of ccp in data
-            let ccp_offset = 2
-                + {
-                    let mut ret = None;
-                    for (i, triple) in data[2..].chunks_exact(3).enumerate() {
-                        let cc_valid = (triple[0] & 0x04) == 0x04;
-                        let cc_type = triple[0] & 0x3;
-                        trace!(
-                        "byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}. valid: {cc_valid}, type: {cc_type}",
-                        i * 3,
-                        triple[0],
+                if !cc_valid {
+                    continue;
+                }
+                if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                    trace!(
+                        "have cea608 bytes type {cc_type} 0x{:02x} 0x{:02x}",
                         triple[1],
                         triple[2]
                     );
-                        if (cc_type & 0b10) > 0 {
-                            in_dtvcc = true;
-                        }
-                        if !cc_valid {
-                            continue;
-                        }
-                        if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
-                            trace!(
-                                "have cea608 bytes type {cc_type} 0x{:02x} 0x{:02x}",
-                                triple[1],
-                                triple[2]
-                            );
-                            if let Some(ref mut cea608) = self.cea608 {
-                                let pair = match cc_type {
-                                    0b00 => Cea608::Field1(triple[1], triple[2]),
-                                    0b01 => Cea608::Field2(triple[1], triple[2]),
-                                    _ => unreachable!(),
-                                };
-                                cea608.push(pair);
-                            }
-                            continue;
-                        }
+                    if let Some(ref mut cea608) = self.cea608 {
+                        let pair = match cc_type {
+                            0b00 => Cea608::Field1(triple[1], triple[2]),
+                            0b01 => Cea608::Field2(triple[1], triple[2]),
+                            _ => unreachable!(),
+                        };
+                        cea608.push(pair);
+                    }
+                    continue;
+                }
 
-                        if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
-                            // invalid packet construction;
-                            warn!("cea608 bytes after cea708 data at byte:{}", i * 3);
-                            return Err(ParserError::Cea608AfterCea708 { byte_pos: i * 3 });
-                        }
+                if in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                    // invalid packet construction;
+                    warn!("cea608 bytes after cea708 data at byte:{}", i * 3);
+                    return Err(ParserError::Cea608AfterCea708 { byte_pos: i * 3 });
+                }
 
-                        if ret.is_none() {
-                            ret = Some(i * 3);
-                        }
-                    }
-
-                    if let Some(ret) = ret {
-                        ret
-                    } else {
-                        // no data to process
-                        return Ok(());
-                    }
-                };
-            trace!("ccp offset in input data is at index {ccp_offset}");
-
-            let mut data_iter = pending_data.iter().chain(data[ccp_offset..].iter());
-            let mut i = 0;
-            in_dtvcc = false;
-            loop {
-                let byte0 = data_iter.next();
-                let byte1 = data_iter.next();
-                let byte2 = data_iter.next();
-                i += 3;
-                if let (Some(byte0), Some(byte1), Some(byte2)) = (byte0, byte1, byte2) {
-                    let cc_valid = (byte0 & 0x04) == 0x04;
-                    let cc_type = byte0 & 0x3;
-                    if (cc_type & 0b10) > 0 {
-                        in_dtvcc = true;
-                    }
-                    if !cc_valid {
-                        continue;
-                    }
-                    if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
-                        // 608-in-708 data should not be hit as we skip over it
-                        unreachable!();
-                    }
-
-                    if (cc_type & 0b11) == 0b11 {
-                        trace!("found ccp header at index {}", i - 3);
-                        self.have_initial_ccp_header = true;
-                        // a header byte truncates the size of any previous packet
-                        match DTVCCPacket::parse(&ccp_data) {
-                            Ok(packet) => self.packets.push_front(packet),
-                            Err(ParserError::LengthMismatch { .. }) => (),
-                            Err(e) => {
-                                eprintln!("{e:?}");
-                                unreachable!()
-                            }
-                        }
-                        in_dtvcc = false;
-                        ccp_data = vec![];
-                        let (_seq_no, packet_len) = DTVCCPacket::parse_hdr_byte(*byte1);
-                        trace!("waiting for {} dtvcc bytes", packet_len + 1);
-                        self.ccp_bytes_needed = packet_len + 1;
-                    }
-
-                    if self.have_initial_ccp_header {
-                        trace!("pushing 0x{:02x?}{:02x?}", byte1, byte2);
-                        if self.ccp_bytes_needed > 0 {
-                            ccp_data.push(*byte1);
-                            self.ccp_bytes_needed -= 1;
-                        }
-                        if self.ccp_bytes_needed > 0 {
-                            ccp_data.push(*byte2);
-                            self.ccp_bytes_needed -= 1;
-                        }
-                    }
-                } else {
-                    break;
+                if ret.is_none() {
+                    ret = Some(i * 3);
                 }
             }
-            ccp_data
-        };
+
+            if let Some(ret) = ret {
+                ccp_offset = 2 + ret
+            } else {
+                // no data to process
+                return Ok(());
+            }
+        }
+        trace!("ccp offset in input data is at index {ccp_offset}");
+
+        let mut data_iter = pending_data.iter().chain(data[ccp_offset..].iter());
+        let mut i = 0;
+        in_dtvcc = false;
+        loop {
+            let byte0 = data_iter.next();
+            let byte1 = data_iter.next();
+            let byte2 = data_iter.next();
+            i += 3;
+            let (Some(byte0), Some(byte1), Some(byte2)) = (byte0, byte1, byte2) else {
+                break;
+            };
+            let cc_valid = (byte0 & 0x04) == 0x04;
+            let cc_type = byte0 & 0x3;
+            if (cc_type & 0b10) > 0 {
+                in_dtvcc = true;
+            }
+            if !cc_valid {
+                continue;
+            }
+            if !in_dtvcc && (cc_type == 0b00 || cc_type == 0b01) {
+                // 608-in-708 data should not be hit as we skip over it
+                unreachable!();
+            }
+
+            if (cc_type & 0b11) == 0b11 {
+                trace!("found ccp header at index {}", i - 3);
+                self.have_initial_ccp_header = true;
+                // a header byte truncates the size of any previous packet
+                match DTVCCPacket::parse(&ccp_data) {
+                    Ok(packet) => self.packets.push_front(packet),
+                    Err(ParserError::LengthMismatch { .. }) => (),
+                    Err(e) => {
+                        eprintln!("{e:?}");
+                        unreachable!()
+                    }
+                }
+                in_dtvcc = false;
+                ccp_data = vec![];
+                let (_seq_no, packet_len) = DTVCCPacket::parse_hdr_byte(*byte1);
+                trace!("waiting for {} dtvcc bytes", packet_len + 1);
+                self.ccp_bytes_needed = packet_len + 1;
+            }
+
+            if self.have_initial_ccp_header {
+                trace!("pushing 0x{:02x?}{:02x?}", byte1, byte2);
+                if self.ccp_bytes_needed > 0 {
+                    ccp_data.push(*byte1);
+                    self.ccp_bytes_needed -= 1;
+                }
+                if self.ccp_bytes_needed > 0 {
+                    ccp_data.push(*byte2);
+                    self.ccp_bytes_needed -= 1;
+                }
+            }
+        }
 
         if self.ccp_bytes_needed == 0 {
             match DTVCCPacket::parse(&ccp_data) {
