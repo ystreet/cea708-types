@@ -61,13 +61,14 @@ impl From<tables::CodeError> for ParserError {
     }
 }
 
-/// Represents a CEA-608 compatibility byte pair
+/// A CEA-608 compatibility byte pair
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cea608 {
     Field1(u8, u8),
     Field2(u8, u8),
 }
 
+/// Parses a byte stream of `cc_data` bytes into indivdual [`DTVCCPacket`]s.
 #[derive(Debug, Default)]
 pub struct CCDataParser {
     pending_data: Vec<u8>,
@@ -92,8 +93,8 @@ impl CCDataParser {
     /// Will fail with [ParserError::LengthMismatch] if the length of the data does not match the
     /// number of cc triples specified in the `cc_data` header.
     ///
-    /// Ignores any CEA-608 data provided at the start of the data.  Any CEA-608 data provided
-    /// after valid CEA-708 data will return [ParserError::Cea608AfterCea708].
+    /// Any CEA-608 data provided after valid CEA-708 data will return
+    /// [ParserError::Cea608AfterCea708].
     pub fn push(&mut self, data: &[u8]) -> Result<(), ParserError> {
         trace!("parsing {data:?}");
         if let Some(ref mut cea608) = self.cea608 {
@@ -284,6 +285,7 @@ impl CCDataParser {
         ret
     }
 
+    /// Any [`Cea608`] bytes in the last parsed `cc_data`
     pub fn cea608(&mut self) -> Option<&[Cea608]> {
         if let Some(ref cea608) = self.cea608 {
             Some(cea608)
@@ -670,7 +672,7 @@ impl DTVCCPacket {
         Ok(Self { seq_no, services })
     }
 
-    /// Returns a copy of the [Service]s for this [DTVCCPacket]
+    /// The [Service]s for this [DTVCCPacket]
     pub fn services(&self) -> &[Service] {
         &self.services
     }
