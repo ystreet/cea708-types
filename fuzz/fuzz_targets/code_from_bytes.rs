@@ -3,17 +3,16 @@ use libfuzzer_sys::fuzz_target;
 
 use cea708_types::tables::Code;
 
-use once_cell::sync::Lazy;
+use std::sync::OnceLock;
 
-#[macro_use]
-extern crate log;
+static TRACING: OnceLock<()> = OnceLock::new();
+
+use log::info;
 
 pub fn debug_init() {
-    static TRACING: Lazy<()> = Lazy::new(|| {
+    TRACING.get_or_init(|| {
         env_logger::init();
     });
-
-    Lazy::force(&TRACING);
 }
 
 fuzz_target!(|data: &[u8]| {

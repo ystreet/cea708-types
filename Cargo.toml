@@ -14,7 +14,6 @@ rust-version = "1.71.1"
 [dependencies]
 log = "0.4"
 muldiv = "1"
-once_cell = "1"
 thiserror = "2"
 
 [dev-dependencies]
