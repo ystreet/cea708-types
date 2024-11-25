@@ -8,17 +8,17 @@ use cea708_types::*;
 
 use std::env;
 
-use once_cell::sync::Lazy;
+use std::sync::OnceLock;
+
+static TRACING: OnceLock<()> = OnceLock::new();
 
 #[macro_use]
 extern crate log;
 
 pub fn debug_init() {
-    static TRACING: Lazy<()> = Lazy::new(|| {
+    TRACING.get_or_init(|| {
         env_logger::init();
     });
-
-    Lazy::force(&TRACING);
 }
 
 fn main() -> std::process::ExitCode {

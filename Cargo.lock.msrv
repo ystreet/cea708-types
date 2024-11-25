@@ -62,12 +62,11 @@ dependencies = [
 
 [[package]]
 name = "cea708-types"
-version = "0.3.2"
+version = "0.3.4"
 dependencies = [
  "env_logger",
  "log",
  "muldiv",
- "once_cell",
  "thiserror",
 ]
 
@@ -129,12 +128,6 @@ name = "muldiv"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "956787520e75e9bd233246045d19f42fb73242759cc57fba9611d940ae96d4b0"
-
-[[package]]
-name = "once_cell"
-version = "1.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "proc-macro2"

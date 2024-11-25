@@ -1530,13 +1530,13 @@ mod test {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use once_cell::sync::Lazy;
+    use std::sync::OnceLock;
 
-    static TRACING: Lazy<()> = Lazy::new(|| {
-        env_logger::init();
-    });
+    static TRACING: OnceLock<()> = OnceLock::new();
 
     pub fn test_init_log() {
-        Lazy::force(&TRACING);
+        TRACING.get_or_init(|| {
+            env_logger::init();
+        });
     }
 }
