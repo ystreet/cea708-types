@@ -362,8 +362,16 @@ impl CCDataWriter {
     /// Push a [`Cea608`] byte pair for writing
     pub fn push_cea608(&mut self, cea608: Cea608) {
         match cea608 {
-            Cea608::Field1(byte0, byte1) => self.cea608_1.push((byte0, byte1)),
-            Cea608::Field2(byte0, byte1) => self.cea608_2.push((byte0, byte1)),
+            Cea608::Field1(byte0, byte1) => {
+                if byte0 != 0x80 && byte1 != 0x80 {
+                    self.cea608_1.push((byte0, byte1))
+                }
+            }
+            Cea608::Field2(byte0, byte1) => {
+                if byte0 != 0x80 && byte1 != 0x80 {
+                    self.cea608_2.push((byte0, byte1))
+                }
+            }
         }
     }
 
