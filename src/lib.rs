@@ -306,7 +306,7 @@ impl Framerate {
         self.denom
     }
 
-    fn cea608_pairs_per_field(&self) -> usize {
+    fn cea608_pairs_per_frame(&self) -> usize {
         // CEA-608 has a max bitrate of 960 bits/s for a single field
         // TODO: handle alternating counts for 24fps
         60.mul_div_round(self.denom, self.numer).unwrap() as usize
@@ -328,8 +328,8 @@ pub struct CCDataWriter {
     packets: VecDeque<DTVCCPacket>,
     // part of a packet we could not fit into the previous packet
     pending_packet_data: Vec<u8>,
-    cea608_1: Vec<(u8, u8)>,
-    cea608_2: Vec<(u8, u8)>,
+    cea608_1: VecDeque<(u8, u8)>,
+    cea608_2: VecDeque<(u8, u8)>,
     last_cea608_was_field1: bool,
 }
 
@@ -364,12 +364,12 @@ impl CCDataWriter {
         match cea608 {
             Cea608::Field1(byte0, byte1) => {
                 if byte0 != 0x80 && byte1 != 0x80 {
-                    self.cea608_1.push((byte0, byte1))
+                    self.cea608_1.push_front((byte0, byte1))
                 }
             }
             Cea608::Field2(byte0, byte1) => {
                 if byte0 != 0x80 && byte1 != 0x80 {
-                    self.cea608_2.push((byte0, byte1))
+                    self.cea608_2.push_front((byte0, byte1))
                 }
             }
         }
@@ -430,10 +430,10 @@ impl CCDataWriter {
         w: &mut W,
     ) -> Result<(), std::io::Error> {
         let mut cea608_pair_rem = if self.output_cea608_padding {
-            framerate.cea608_pairs_per_field()
+            framerate.cea608_pairs_per_frame()
         } else {
             framerate
-                .cea608_pairs_per_field()
+                .cea608_pairs_per_frame()
                 .min(self.cea608_1.len().max(self.cea608_2.len() * 2))
         };
 
@@ -458,7 +458,7 @@ impl CCDataWriter {
             if cea608_pair_rem > 0 {
                 if !self.last_cea608_was_field1 {
                     trace!("attempting to write a cea608 byte pair from field 1");
-                    if let Some((byte0, byte1)) = self.cea608_1.pop() {
+                    if let Some((byte0, byte1)) = self.cea608_1.pop_back() {
                         w.write_all(&[0xFC, byte0, byte1])?;
                         cc_count_rem -= 1;
                     } else if !self.cea608_2.is_empty() {
@@ -472,7 +472,7 @@ impl CCDataWriter {
                     self.last_cea608_was_field1 = true;
                 } else {
                     trace!("attempting to write a cea608 byte pair from field 2");
-                    if let Some((byte0, byte1)) = self.cea608_2.pop() {
+                    if let Some((byte0, byte1)) = self.cea608_2.pop_back() {
                         w.write_all(&[0xFD, byte0, byte1])?;
                         cc_count_rem -= 1;
                     } else if self.output_cea608_padding {
@@ -1231,7 +1231,7 @@ mod test {
         }
     }
 
-    static WRITE_CC_DATA: [TestCCData; 6] = [
+    static WRITE_CC_DATA: [TestCCData; 7] = [
         // simple packet with a single service and single code
         TestCCData {
             framerate: Framerate::new(25, 1),
@@ -1482,6 +1482,22 @@ mod test {
             }],
             cea608: &[&[Cea608::Field1(0x20, 0x42), Cea608::Field2(0x21, 0x43)]],
         },
+        // simple packet with multiple cea608 that will span two outputs
+        TestCCData {
+            framerate: Framerate::new(24, 1),
+            cc_data: &[
+                &[0x80 | 0x40 | 0x02, 0xFF, 0xFC, 0x20, 0x42, 0xFD, 0x21, 0x43],
+                &[0x80 | 0x40 | 0x02, 0xFF, 0xFC, 0x22, 0x44, 0xFD, 0x23, 0x45],
+            ],
+            packets: &[PacketData {
+                sequence_no: 3,
+                services: &[],
+            }],
+            cea608: &[
+                &[Cea608::Field1(0x20, 0x42), Cea608::Field2(0x21, 0x43)],
+                &[Cea608::Field1(0x22, 0x44), Cea608::Field2(0x23, 0x45)],
+            ],
+        },
     ];
 
     #[test]
@@ -1517,9 +1533,9 @@ mod test {
     }
 
     #[test]
-    fn framerate_cea608_pairs_per_field() {
-        assert_eq!(Framerate::new(60, 1).cea608_pairs_per_field(), 1);
-        assert_eq!(Framerate::new(30, 1).cea608_pairs_per_field(), 2);
+    fn framerate_cea608_pairs_per_frame() {
+        assert_eq!(Framerate::new(60, 1).cea608_pairs_per_frame(), 1);
+        assert_eq!(Framerate::new(30, 1).cea608_pairs_per_frame(), 2);
     }
 
     #[test]
