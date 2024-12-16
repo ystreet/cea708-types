@@ -604,7 +604,12 @@ impl DTVCCPacket {
                 service.len() - self.free_space(),
             ));
         }
-        self.services.push(service);
+
+        // Services allowed are either the padding 0 service or non-empty
+        // services
+        if service.number == 0 || !service.codes().is_empty() {
+            self.services.push(service);
+        }
         Ok(())
     }
 
