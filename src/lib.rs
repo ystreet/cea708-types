@@ -146,7 +146,7 @@ impl CCDataParser {
                 let cc_valid = (triple[0] & 0x04) == 0x04;
                 let cc_type = triple[0] & 0x3;
                 trace!(
-                    "byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}. valid: {cc_valid}, type: {cc_type}",
+                    "input byte:{} triple 0x{:02x} 0x{:02x} 0x{:02x}. valid: {cc_valid}, type: {cc_type}",
                     i * 3,
                     triple[0],
                     triple[1],
@@ -202,12 +202,15 @@ impl CCDataParser {
             let byte0 = data_iter.next();
             let byte1 = data_iter.next();
             let byte2 = data_iter.next();
-            i += 3;
             let (Some(byte0), Some(byte1), Some(byte2)) = (byte0, byte1, byte2) else {
                 break;
             };
             let cc_valid = (byte0 & 0x04) == 0x04;
             let cc_type = byte0 & 0x3;
+            trace!(
+                "pending byte:{i} triple 0x{byte0:02x} 0x{byte1:02x} 0x{byte2:02x}. valid: {cc_valid}, type: {cc_type}",
+            );
+            i += 3;
             if (cc_type & 0b10) > 0 {
                 in_dtvcc = true;
             }
@@ -678,12 +681,8 @@ impl DTVCCPacket {
     }
 
     fn hdr_byte(&self) -> u8 {
-        let packet_size_code = if self.len() == 127 {
-            0
-        } else {
-            (self.len() + 1) / 2
-        };
-        (self.seq_no & 0x3) << 6 | packet_size_code as u8
+        debug_assert!(self.len() <= 128);
+        (self.seq_no & 0x3) << 6 | (self.cc_count() & 0x3F) as u8
     }
 
     /// Write the [DTVCCPacket] to a byte stream
@@ -1005,7 +1004,44 @@ mod test {
         cea608: &'a [&'a [Cea608]],
     }
 
-    static TEST_CC_DATA: [TestCCData; 8] = [
+    static TEST_CODES: [tables::Code; 34] = [
+        tables::Code::LatinCapitalA,
+        tables::Code::LatinCapitalB,
+        tables::Code::LatinCapitalC,
+        tables::Code::LatinCapitalD,
+        tables::Code::LatinCapitalE,
+        tables::Code::LatinCapitalF,
+        tables::Code::LatinCapitalG,
+        tables::Code::LatinCapitalH,
+        tables::Code::LatinCapitalI,
+        tables::Code::LatinCapitalJ,
+        tables::Code::LatinCapitalK,
+        tables::Code::LatinCapitalL,
+        tables::Code::LatinCapitalM,
+        tables::Code::LatinCapitalN,
+        tables::Code::LatinCapitalO,
+        tables::Code::LatinCapitalP,
+        tables::Code::LatinCapitalQ,
+        tables::Code::LatinCapitalR,
+        tables::Code::LatinCapitalS,
+        tables::Code::LatinCapitalT,
+        tables::Code::LatinCapitalU,
+        tables::Code::LatinCapitalV,
+        tables::Code::LatinCapitalW,
+        tables::Code::LatinCapitalX,
+        tables::Code::LatinCapitalY,
+        tables::Code::LatinCapitalZ,
+        tables::Code::LatinLowerA,
+        tables::Code::LatinLowerB,
+        tables::Code::LatinLowerC,
+        tables::Code::LatinLowerD,
+        tables::Code::LatinLowerE,
+        tables::Code::LatinLowerF,
+        tables::Code::LatinLowerG,
+        tables::Code::LatinLowerH,
+    ];
+
+    static TEST_CC_DATA: [TestCCData; 9] = [
         // simple packet with a single service and single code
         TestCCData {
             framerate: Framerate::new(25, 1),
@@ -1195,6 +1231,44 @@ mod test {
                 &[Cea608::Field1(0x41, 0x42), Cea608::Field2(0x43, 0x44)],
             ],
         },
+        // cc_data with two DTVCCPacket. First packet spans two cc_data frames, second is whole
+        // contained within the second cc_data frame
+        TestCCData {
+            framerate: Framerate::new(25, 1),
+            cc_data: &[
+                &[0x80 | 0x40 | 0x01, 0xFF, 0xFF, 0x02, 0x21],
+                &[
+                    0x80 | 0x40 | 0x03,
+                    0xFF,
+                    0xFE,
+                    0x41,
+                    0x00,
+                    0xFF,
+                    0x42,
+                    0x41,
+                    0xFE,
+                    0x42,
+                    0x00,
+                ],
+            ],
+            packets: &[
+                PacketData {
+                    sequence_no: 0,
+                    services: &[ServiceData {
+                        service_no: 1,
+                        codes: &[tables::Code::LatinCapitalA],
+                    }],
+                },
+                PacketData {
+                    sequence_no: 1,
+                    services: &[ServiceData {
+                        service_no: 2,
+                        codes: &[tables::Code::LatinCapitalB],
+                    }],
+                },
+            ],
+            cea608: &[],
+        },
     ];
 
     #[test]
@@ -1231,7 +1305,7 @@ mod test {
         }
     }
 
-    static WRITE_CC_DATA: [TestCCData; 7] = [
+    static WRITE_CC_DATA: [TestCCData; 8] = [
         // simple packet with a single service and single code
         TestCCData {
             framerate: Framerate::new(25, 1),
@@ -1320,39 +1394,7 @@ mod test {
                 sequence_no: 3,
                 services: &[ServiceData {
                     service_no: 1,
-                    codes: &[
-                        tables::Code::LatinCapitalA,
-                        tables::Code::LatinCapitalB,
-                        tables::Code::LatinCapitalC,
-                        tables::Code::LatinCapitalD,
-                        tables::Code::LatinCapitalE,
-                        tables::Code::LatinCapitalF,
-                        tables::Code::LatinCapitalG,
-                        tables::Code::LatinCapitalH,
-                        tables::Code::LatinCapitalI,
-                        tables::Code::LatinCapitalJ,
-                        tables::Code::LatinCapitalK,
-                        tables::Code::LatinCapitalL,
-                        tables::Code::LatinCapitalM,
-                        tables::Code::LatinCapitalN,
-                        tables::Code::LatinCapitalO,
-                        tables::Code::LatinCapitalP,
-                        tables::Code::LatinCapitalQ,
-                        tables::Code::LatinCapitalR,
-                        tables::Code::LatinCapitalS,
-                        tables::Code::LatinCapitalT,
-                        tables::Code::LatinCapitalU,
-                        tables::Code::LatinCapitalV,
-                        tables::Code::LatinCapitalW,
-                        tables::Code::LatinCapitalX,
-                        tables::Code::LatinCapitalY,
-                        tables::Code::LatinCapitalZ,
-                        tables::Code::LatinLowerA,
-                        tables::Code::LatinLowerB,
-                        tables::Code::LatinLowerC,
-                        tables::Code::LatinLowerD,
-                        tables::Code::LatinLowerE,
-                    ],
+                    codes: TEST_CODES.first_chunk::<31>().unwrap(),
                 }],
             }],
             cea608: &[],
@@ -1445,39 +1487,7 @@ mod test {
                 sequence_no: 3,
                 services: &[ServiceData {
                     service_no: 1,
-                    codes: &[
-                        tables::Code::LatinCapitalA,
-                        tables::Code::LatinCapitalB,
-                        tables::Code::LatinCapitalC,
-                        tables::Code::LatinCapitalD,
-                        tables::Code::LatinCapitalE,
-                        tables::Code::LatinCapitalF,
-                        tables::Code::LatinCapitalG,
-                        tables::Code::LatinCapitalH,
-                        tables::Code::LatinCapitalI,
-                        tables::Code::LatinCapitalJ,
-                        tables::Code::LatinCapitalK,
-                        tables::Code::LatinCapitalL,
-                        tables::Code::LatinCapitalM,
-                        tables::Code::LatinCapitalN,
-                        tables::Code::LatinCapitalO,
-                        tables::Code::LatinCapitalP,
-                        tables::Code::LatinCapitalQ,
-                        tables::Code::LatinCapitalR,
-                        tables::Code::LatinCapitalS,
-                        tables::Code::LatinCapitalT,
-                        tables::Code::LatinCapitalU,
-                        tables::Code::LatinCapitalV,
-                        tables::Code::LatinCapitalW,
-                        tables::Code::LatinCapitalX,
-                        tables::Code::LatinCapitalY,
-                        tables::Code::LatinCapitalZ,
-                        tables::Code::LatinLowerA,
-                        tables::Code::LatinLowerB,
-                        tables::Code::LatinLowerC,
-                        tables::Code::LatinLowerD,
-                        tables::Code::LatinLowerE,
-                    ],
+                    codes: TEST_CODES.first_chunk::<31>().unwrap(),
                 }],
             }],
             cea608: &[&[Cea608::Field1(0x20, 0x42), Cea608::Field2(0x21, 0x43)]],
@@ -1497,6 +1507,294 @@ mod test {
                 &[Cea608::Field1(0x20, 0x42), Cea608::Field2(0x21, 0x43)],
                 &[Cea608::Field1(0x22, 0x44), Cea608::Field2(0x23, 0x45)],
             ],
+        },
+        // a full packet that will span four outputs
+        TestCCData {
+            framerate: Framerate::new(60, 1),
+            cc_data: &[
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFC,
+                    0x20,
+                    0x42,
+                    0xFF,
+                    0x00, // seq 0, size 127
+                    0x20 | 0x1F,
+                    0xFE,
+                    0x41,
+                    0x42,
+                    0xFE,
+                    0x43,
+                    0x44,
+                    0xFE,
+                    0x45,
+                    0x46,
+                    0xFE,
+                    0x47,
+                    0x48,
+                    0xFE,
+                    0x49,
+                    0x4A,
+                    0xFE,
+                    0x4B,
+                    0x4C,
+                    0xFE,
+                    0x4D,
+                    0x4E,
+                    0xFE,
+                    0x4F,
+                    0x50,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFD,
+                    0x21,
+                    0x43,
+                    0xFE,
+                    0x51,
+                    0x52,
+                    0xFE,
+                    0x53,
+                    0x54,
+                    0xFE,
+                    0x55,
+                    0x56,
+                    0xFE,
+                    0x57,
+                    0x58,
+                    0xFE,
+                    0x59,
+                    0x5A,
+                    0xFE,
+                    0x61,
+                    0x62,
+                    0xFE,
+                    0x63,
+                    0x64,
+                    0xFE,
+                    0x65,
+                    0x40 | 0x1F,
+                    0xFE,
+                    0x42,
+                    0x43,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFC,
+                    0x22,
+                    0x44,
+                    0xFE,
+                    0x44,
+                    0x45,
+                    0xFE,
+                    0x46,
+                    0x47,
+                    0xFE,
+                    0x48,
+                    0x49,
+                    0xFE,
+                    0x4A,
+                    0x4B,
+                    0xFE,
+                    0x4C,
+                    0x4D,
+                    0xFE,
+                    0x4E,
+                    0x4F,
+                    0xFE,
+                    0x50,
+                    0x51,
+                    0xFE,
+                    0x52,
+                    0x53,
+                    0xFE,
+                    0x54,
+                    0x55,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFD,
+                    0x23,
+                    0x45,
+                    0xFE,
+                    0x56,
+                    0x57,
+                    0xFE,
+                    0x58,
+                    0x59,
+                    0xFE,
+                    0x5A,
+                    0x61,
+                    0xFE,
+                    0x62,
+                    0x63,
+                    0xFE,
+                    0x64,
+                    0x65,
+                    0xFE,
+                    0x66,
+                    0x60 | 0x1F,
+                    0xFE,
+                    0x43,
+                    0x44,
+                    0xFE,
+                    0x45,
+                    0x46,
+                    0xFE,
+                    0x47,
+                    0x48,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFC,
+                    0x24,
+                    0x46,
+                    0xFE,
+                    0x49,
+                    0x4A,
+                    0xFE,
+                    0x4B,
+                    0x4C,
+                    0xFE,
+                    0x4D,
+                    0x4E,
+                    0xFE,
+                    0x4F,
+                    0x50,
+                    0xFE,
+                    0x51,
+                    0x52,
+                    0xFE,
+                    0x53,
+                    0x54,
+                    0xFE,
+                    0x55,
+                    0x56,
+                    0xFE,
+                    0x57,
+                    0x58,
+                    0xFE,
+                    0x59,
+                    0x5A,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFD,
+                    0x25,
+                    0x47,
+                    0xFE,
+                    0x61,
+                    0x62,
+                    0xFE,
+                    0x63,
+                    0x64,
+                    0xFE,
+                    0x65,
+                    0x66,
+                    0xFE,
+                    0x67,
+                    0x80 | 0x1E,
+                    0xFE,
+                    0x44,
+                    0x45,
+                    0xFE,
+                    0x46,
+                    0x47,
+                    0xFE,
+                    0x48,
+                    0x49,
+                    0xFE,
+                    0x4A,
+                    0x4B,
+                    0xFE,
+                    0x4C,
+                    0x4D,
+                ],
+                &[
+                    0x80 | 0x40 | 0x0A,
+                    0xFF,
+                    0xFC,
+                    0x26,
+                    0x48,
+                    0xFE,
+                    0x4E,
+                    0x4F,
+                    0xFE,
+                    0x50,
+                    0x51,
+                    0xFE,
+                    0x52,
+                    0x53,
+                    0xFE,
+                    0x54,
+                    0x55,
+                    0xFE,
+                    0x56,
+                    0x57,
+                    0xFE,
+                    0x58,
+                    0x59,
+                    0xFE,
+                    0x5A,
+                    0x61,
+                    0xFE,
+                    0x62,
+                    0x63,
+                    0xFE,
+                    0x64,
+                    0x65,
+                ],
+                &[0x80 | 0x40 | 0x02, 0xFF, 0xFD, 0x27, 0x49, 0xFE, 0x66, 0x67],
+            ],
+            packets: &[PacketData {
+                sequence_no: 0,
+                services: &[
+                    ServiceData {
+                        service_no: 1,
+                        codes: TEST_CODES.first_chunk::<31>().unwrap(),
+                    },
+                    ServiceData {
+                        service_no: 2,
+                        codes: TEST_CODES
+                            .first_chunk::<32>()
+                            .unwrap()
+                            .last_chunk::<31>()
+                            .unwrap(),
+                    },
+                    ServiceData {
+                        service_no: 3,
+                        codes: TEST_CODES
+                            .first_chunk::<33>()
+                            .unwrap()
+                            .last_chunk::<31>()
+                            .unwrap(),
+                    },
+                    ServiceData {
+                        service_no: 4,
+                        codes: TEST_CODES
+                            .first_chunk::<33>()
+                            .unwrap()
+                            .last_chunk::<30>()
+                            .unwrap(),
+                    },
+                ],
+            }],
+            cea608: &[&[
+                Cea608::Field1(0x20, 0x42),
+                Cea608::Field2(0x21, 0x43),
+                Cea608::Field1(0x22, 0x44),
+                Cea608::Field2(0x23, 0x45),
+                Cea608::Field1(0x24, 0x46),
+                Cea608::Field2(0x25, 0x47),
+                Cea608::Field1(0x26, 0x48),
+                Cea608::Field2(0x27, 0x49),
+            ]],
         },
     ];
 
