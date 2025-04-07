@@ -301,6 +301,19 @@ impl Service {
         hdr_size + self.codes_len()
     }
 
+    /// Whether this [Service] block contains no [Code](tables::Code)s.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::Service;
+    /// let service = Service::new(1);
+    /// assert_eq!(service.len(), 0);
+    /// assert!(service.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.codes.is_empty()
+    }
+
     /// Push a [tables::Code] to the end of this [Service]
     ///
     /// # Errors
