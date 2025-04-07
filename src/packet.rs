@@ -89,6 +89,9 @@ impl DTVCCPacket {
                 service.len() - self.free_space(),
             ));
         }
+        if service.is_empty() {
+            return Err(WriterError::EmptyService);
+        }
         self.services.push(service);
         Ok(())
     }

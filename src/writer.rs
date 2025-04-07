@@ -22,6 +22,9 @@ pub enum WriterError {
     /// It is not possible to write to this resource
     #[error("The resource is not writable")]
     ReadOnly,
+    /// It is not possible to write an empty service
+    #[error("Empty service was attempted to be written")]
+    EmptyService,
 }
 
 /// A struct for writing cc_data packets
