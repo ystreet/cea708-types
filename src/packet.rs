@@ -70,6 +70,22 @@ impl DTVCCPacket {
         }
     }
 
+    /// Whether this packet is currently empty and contains no [`Service`]s.
+    ///
+    /// # Examples
+    /// ```
+    /// # use cea708_types::{*, tables::*};
+    /// let mut packet = DTVCCPacket::new(2);
+    /// assert!(packet.is_empty());
+    /// let mut service = Service::new(1);
+    /// service.push_code(&Code::LatinCapitalA).unwrap();
+    /// packet.push_service(service);
+    /// assert!(!packet.is_empty());
+    /// ```
+    pub fn is_empty(&self) -> bool {
+        self.services.is_empty()
+    }
+
     /// Push a completed service block into this [DTVCCPacket]
     ///
     /// # Examples
@@ -83,7 +99,6 @@ impl DTVCCPacket {
     /// assert_eq!(3, packet.len());
     /// ```
     pub fn push_service(&mut self, service: Service) -> Result<(), WriterError> {
-        // TODO: fail if we would overrun max size
         if service.len() > self.free_space() {
             return Err(WriterError::WouldOverflow(
                 service.len() - self.free_space(),
@@ -146,7 +161,7 @@ impl DTVCCPacket {
         while offset < data.len() {
             let service = Service::parse(&data[offset..])?;
             trace!("parsed service {service:?}, len:{}", service.len());
-            if service.len() == 0 {
+            if service.is_empty() {
                 offset += 1;
                 continue;
             }
@@ -351,7 +366,7 @@ impl Service {
     /// # Errors
     ///
     /// * [ParserError::LengthMismatch] if the length of the data is less than the size advertised in the
-    /// header
+    ///   header
     ///
     /// # Examples
     /// ```
