@@ -372,7 +372,6 @@ impl Service {
         let mut service_no = (byte & 0xE0) >> 5;
         let block_size = (byte & 0x1F) as usize;
         let mut idx = 1;
-        trace!("block_size: {block_size}");
         if service_no == 7 && block_size != 0 {
             if data.len() == 1 {
                 return Err(ParserError::LengthMismatch {
@@ -384,6 +383,7 @@ impl Service {
             service_no = byte2 & 0x3F;
             idx += 1;
         }
+        trace!("service no: {service_no}, block_size: {block_size}");
 
         if data.len() < idx + block_size {
             return Err(ParserError::LengthMismatch {
@@ -434,9 +434,9 @@ impl Service {
     pub fn write<W: std::io::Write>(&self, w: &mut W) -> Result<(), std::io::Error> {
         // TODO: fail if we would overrun max size
         let len = (self.codes_len() & 0x3F) as u8;
-        if self.number > 7 {
+        if self.number >= 7 {
             let mut buf = [0; 2];
-            buf[0] = 0xC0 | len;
+            buf[0] = 0xE0 | len;
             buf[1] = self.number;
             w.write_all(&buf)?;
         } else {
@@ -483,5 +483,21 @@ mod test {
         dtvcc.write(&mut written).unwrap();
         let data = [0x02, 0x01 << 5 | 0x01, 0x2A, 0x00];
         assert_eq!(written, data);
+    }
+
+    #[test]
+    fn service_numbers() {
+        test_init_log();
+        for i in 1..64 {
+            let mut service = Service::new(i);
+            let code = tables::Code::Asterisk;
+            service.push_code(&code).unwrap();
+            let mut output = vec![];
+            service.write(&mut output).unwrap();
+            log::info!("created service {i} with data {output:x?}");
+            let parsed = Service::parse(&output).unwrap();
+            assert_eq!(service.number(), parsed.number());
+            assert_eq!(service.codes(), &[code]);
+        }
     }
 }
