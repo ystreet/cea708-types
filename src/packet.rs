@@ -111,6 +111,105 @@ impl DTVCCPacket {
         Ok(())
     }
 
+    fn last_service_that_fits_code(
+        &mut self,
+        service_no: u8,
+        code: &tables::Code,
+    ) -> Option<&mut Service> {
+        self.services
+            .iter_mut()
+            .rev()
+            .find(|service| service.number() == service_no)
+            .filter(|service| service.free_space() >= code.byte_len())
+    }
+
+    fn mut_service_by_number(&mut self, service_no: u8) -> Option<&mut Service> {
+        self.services
+            .iter_mut()
+            .rev()
+            .find(|service| service.number() == service_no)
+    }
+
+    fn push_new_service_with_code(
+        &mut self,
+        service_no: u8,
+        code: tables::Code,
+    ) -> Result<(), WriterError> {
+        let free_space = self.free_space();
+        let mut service = Service::new(service_no);
+        service.push_code(&code)?;
+        trace!(
+            "pusing code into new service {}, free space {free_space}",
+            service.len()
+        );
+        if service.len() > free_space {
+            return Err(WriterError::WouldOverflow(
+                service.len() - self.free_space(),
+            ));
+        }
+        self.services.push(service);
+        Ok(())
+    }
+
+    fn push_code_existing_service(
+        existing: &mut Service,
+        code: tables::Code,
+        free_space: usize,
+    ) -> Result<(), WriterError> {
+        trace!(
+            "push code into existing service {}, free space {free_space}",
+            existing.len()
+        );
+        if code.byte_len() > free_space {
+            return Err(WriterError::WouldOverflow(code.byte_len() - free_space));
+        }
+        existing.push_code(&code)
+    }
+
+    /// Push a [`Code`](tables::Code) into this [`DTVCCPacket`]
+    ///
+    /// Will try to push the [`Code`](tables::Code) into an already existing [`Service`] within the
+    /// packet.  If that fails, then will create and push a new [`Service`] with the
+    /// [`Code`](tables::Code).
+    ///
+    /// # Panics
+    ///
+    /// * if service_no >= 64
+    pub fn push_code(&mut self, service_no: u8, code: tables::Code) -> Result<(), WriterError> {
+        let free_space = self.free_space();
+
+        // find the latest service with this number that can fit this code
+        let Some(existing) = self.last_service_that_fits_code(service_no, &code) else {
+            return self.push_new_service_with_code(service_no, code);
+        };
+        Self::push_code_existing_service(existing, code, free_space)
+    }
+
+    /// Push a [`Code`](tables::Code) into this [`DTVCCPacket`] without creating a new [`Service`]
+    /// on overflow.
+    ///
+    /// Will try to push the [`Code`](tables::Code) into the last already existing [`Service`] with
+    /// `service_no` within the packet.
+    ///
+    /// Returns an error if the [`Service`] will not accomodate the [`Code`](tables::Code).
+    ///
+    /// # Panics
+    ///
+    /// * if service_no >= 64
+    pub fn push_code_into_single_service(
+        &mut self,
+        service_no: u8,
+        code: tables::Code,
+    ) -> Result<(), WriterError> {
+        let free_space = self.free_space();
+
+        // find the latest service with this number that can fit this code
+        let Some(existing) = self.mut_service_by_number(service_no) else {
+            return self.push_new_service_with_code(service_no, code);
+        };
+        Self::push_code_existing_service(existing, code, free_space)
+    }
+
     pub(crate) fn parse_hdr_byte(byte: u8) -> (u8, usize) {
         let seq_no = (byte & 0xC0) >> 6;
         let len = byte & 0x3F;
@@ -514,5 +613,41 @@ mod test {
             assert_eq!(service.number(), parsed.number());
             assert_eq!(service.codes(), &[code]);
         }
+    }
+
+    #[test]
+    fn write_full_packet_same_service_no() {
+        test_init_log();
+        let mut packet = DTVCCPacket::new(0);
+        while packet.free_space() > 0 {
+            packet.push_code(1, tables::Code::LatinLowerA).unwrap();
+        }
+        let codes = packet
+            .services()
+            .iter()
+            .flat_map(|service| service.codes())
+            .collect::<Vec<_>>();
+        assert_eq!(codes.len(), 123);
+    }
+
+    #[test]
+    fn write_packet_single_service() {
+        test_init_log();
+        let mut packet = DTVCCPacket::new(0);
+        let mut service = Service::new(2);
+        while service.free_space() > 0 {
+            packet
+                .push_code_into_single_service(1, tables::Code::LatinLowerA)
+                .unwrap();
+            service.push_code(&tables::Code::LatinLowerA).unwrap();
+        }
+        let packet_codes = packet
+            .services()
+            .iter()
+            .flat_map(|service| service.codes().iter().cloned())
+            .collect::<Vec<_>>();
+        let service_codes = service.codes().to_vec();
+        assert_eq!(packet_codes.len(), 31);
+        assert_eq!(packet_codes, service_codes);
     }
 }
